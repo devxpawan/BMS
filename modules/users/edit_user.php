@@ -1,0 +1,777 @@
+<?php
+require_once __DIR__ . '/../../config/paths.php';
+
+// Start session at the very beginning
+session_start();
+
+// Check if user is logged in, if not redirect to login page
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    // Clear any existing output buffers
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    // Force redirect to login page
+    header("Location: " . BASE_URL . "signin.php");
+    exit(); // Stop execution immediately
+}
+
+// Admin-only access
+if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
+    header("Location: " . BASE_URL . "index.php");
+    exit();
+}
+
+// Include necessary files
+require_once BASE_PATH . 'includes/db_connection.php';
+require_once BASE_PATH . 'includes/functions.php';
+
+// Check if the user ID is provided in the URL
+if (!isset($_GET['id']) || empty($_GET['id'])) {
+    $_SESSION['error_message'] = "User ID is required.";
+    header("Location: " . BASE_URL . "modules/users/users.php");
+    exit();
+}
+
+$user_id = intval($_GET['id']);
+
+// Fetch user details from the database
+try {
+    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        // No user found with the given ID
+        $_SESSION['error_message'] = "User not found.";
+        header("Location: " . BASE_URL . "modules/users/users.php");
+        exit();
+    }
+
+    $user = $result->fetch_assoc();
+    $stmt->close();
+} catch (Exception $e) {
+    $_SESSION['error_message'] = "Database error: " . $e->getMessage();
+    header("Location: " . BASE_URL . "modules/users/users.php");
+    exit();
+}
+
+// Generate CSRF token if it doesn't exist
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+    // Determine values to display (prioritize GET parameters for form repopulation)
+    $name = isset($_GET['name']) ? urldecode($_GET['name']) : $user['name'];
+    $email = isset($_GET['email']) ? urldecode($_GET['email']) : $user['email'];
+    $mobile = isset($_GET['mobile']) ? urldecode($_GET['mobile']) : $user['mobile'];
+    $nic = isset($_GET['nic']) ? urldecode($_GET['nic']) : $user['nic'];
+    $address = isset($_GET['address']) ? urldecode($_GET['address']) : $user['address'];
+    $status = isset($_GET['status']) ? $_GET['status'] : $user['status'];
+    $role_id = isset($_GET['role_id']) ? $_GET['role_id'] : $user['role_id'];
+
+    // Check if current user is editing their own account
+    $is_editing_self = ($user_id == $_SESSION['user_id']);
+
+    // Fetch available roles dynamically
+    $roles = [];
+    $roleQuery = "SELECT id, name FROM roles";
+    $roleResult = $conn->query($roleQuery);
+
+    // Collect roles into an array
+    while ($roleRow = $roleResult->fetch_assoc()) {
+        $roles[] = $roleRow;
+    }
+    ?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <?php require_once BASE_PATH . 'includes/header.php'; ?>
+    <title>Edit User</title>
+    <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+
+        .form-floating .form-control {
+            height: calc(3.5rem + 2px);
+        }
+    </style>
+</head>
+
+<body class="sb-nav-fixed">
+    <?php require_once BASE_PATH . 'includes/navbar.php'; ?>
+    <div id="layoutSidenav">
+        <?php require_once BASE_PATH . 'includes/sidebar.php'; ?>
+
+        <div id="layoutSidenav_content">
+            <main>
+                <div class="page-header d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h5>Edit User</h5>
+                        <p class="text-muted">Update user information</p>
+                    </div>
+                </div>
+
+                <!-- Success Message Display -->
+                <?php if (isset($_SESSION['success_message'])): ?>
+                    <script>document.addEventListener('DOMContentLoaded', function() { showToast('success', '<?php echo addslashes($_SESSION["success_message"]); ?>'); });</script>
+                    <?php unset($_SESSION['success_message']); ?>
+                <?php endif; ?>
+
+                <!-- Error Message Display -->
+                <?php if (isset($_SESSION['error_message'])): ?>
+                    <script>document.addEventListener('DOMContentLoaded', function() { showToast('error', '<?php echo addslashes($_SESSION["error_message"]); ?>'); });</script>
+                    <?php unset($_SESSION['error_message']); ?>
+                <?php endif; ?>
+
+                <div class="card" style="margin: 0 32px; border: 1px solid #eaecf0; border-radius: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); background: #fff;">
+                    <div class="card-body" style="padding: 28px 32px;">
+                        <form method="POST" action="<?= BASE_URL ?>modules/users/update_edit_user.php" id="editUserForm" novalidate>
+                            <!-- CSRF Token and User ID -->
+                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
+                            <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user_id); ?>">
+                            <input type="hidden" name="edit_mode" value="1">
+
+                            <div class="row">
+                                <!-- User Details Section -->
+                                <div class="col-md-6">
+                                    <div class="premium-section-header">
+                                        <i class="fas fa-user-circle me-2"></i> User Details
+                                    </div>
+
+                                        <!-- Name Field -->
+                                        <div class="mb-3">
+                                            <label for="name" class="form-label">Full Name</label>
+                                            <input type="text" class="form-control" id="name" name="name"
+                                                placeholder="Full Name" 
+                                                value="<?php echo htmlspecialchars($name); ?>" data-original="<?php echo htmlspecialchars($name); ?>" required>
+                                            <div class="error-feedback" id="name-error"></div>
+                                        </div>
+
+                                        <!-- Email Field -->
+                                        <div class="mb-3">
+                                            <label for="email" class="form-label">Email Address</label>
+                                            <input type="email" class="form-control" id="email" name="email"
+                                                placeholder="name@example.com" 
+                                                value="<?php echo htmlspecialchars($email); ?>" data-original="<?php echo htmlspecialchars($email); ?>" required>
+                                            <div class="error-feedback" id="email-error"></div>
+                                        </div>
+
+                                        <!-- Password Field (Optional for Edit) -->
+                                        <div class="mb-3">
+                                            <label for="password" class="form-label">Password (Leave blank to keep current)</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="password"
+                                                    name="password" placeholder="New Password">
+                                                <button class="btn btn-outline-secondary toggle-password"
+                                                    type="button">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Mobile Field -->
+                                        <div class="mb-3">
+                                            <label for="mobile" class="form-label">Mobile Number</label>
+                                            <input type="tel" class="form-control" id="mobile" name="mobile"
+                                                placeholder="Enter Mobile Number" 
+                                                value="<?php echo htmlspecialchars($mobile); ?>" data-original="<?php echo htmlspecialchars($mobile); ?>">
+                                            <div class="error-feedback" id="mobile-error"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Additional Details Section -->
+                                    <div class="col-md-6">
+                                        <div class="premium-section-header">
+                                            <i class="fas fa-user-shield me-2"></i> Configuration Details
+                                        </div>
+                                        
+                                        <!-- NIC Field -->
+                                        <div class="mb-3">
+                                            <label for="nic" class="form-label">NIC Number</label>
+                                            <input type="text" class="form-control" id="nic" name="nic"
+                                                placeholder="Enter NIC Number" 
+                                                value="<?php echo htmlspecialchars($nic); ?>" data-original="<?php echo htmlspecialchars($nic); ?>">
+                                            <div class="error-feedback" id="nic-error"></div>
+                                        </div>
+
+                                        <!-- Address Field -->
+                                        <div class="mb-3">
+                                            <label for="address" class="form-label">Address</label>
+                                            <textarea class="form-control" id="address" name="address"
+                                                placeholder="Enter Full Address" rows="3" data-original="<?php echo htmlspecialchars($address); ?>"><?php echo htmlspecialchars($address); ?></textarea>
+                                        </div>
+
+                                        <!-- Status Field -->
+                                        <div class="mb-3">
+                                            <label for="status" class="form-label">Status</label>
+                                            <?php if ($is_editing_self): ?>
+                                                <input type="hidden" name="status" value="<?php echo htmlspecialchars($status); ?>">
+                                            <?php endif; ?>
+                                            <select class="form-select" id="status" name="status" <?php echo $is_editing_self ? 'disabled' : 'required'; ?> data-original="<?php echo htmlspecialchars(strtolower($status)); ?>">
+                                                <option value="active" <?php echo (strtolower($status) == 'active') ? 'selected' : ''; ?>>Active</option>
+                                                <option value="inactive" <?php echo (strtolower($status) == 'inactive') ? 'selected' : ''; ?>>Inactive</option>
+                                            </select>
+                                            <?php if ($is_editing_self): ?>
+                                                <div class="form-text text-muted">Cannot change your own status.</div>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <!-- Role Field - Dynamically Populated -->
+                                        <div class="mb-3">
+                                            <label for="role_id" class="form-label">Role</label>
+                                            <select class="form-select" id="role_id" name="role_id" required data-original="<?php echo htmlspecialchars($role_id); ?>">
+                                                <option value="">Select Role...</option>
+                                                <?php foreach ($roles as $role): ?>
+                                                    <option value="<?= htmlspecialchars($role['id']) ?>" 
+                                                            <?php echo ($role['id'] == $role_id) ? 'selected' : ''; ?>>
+                                                        <?= htmlspecialchars($role['name']) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <div class="error-feedback" id="role-error"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Buttons -->
+                                <div class="row mt-4 pt-3 border-top">
+                                    <div class="col-12 d-flex justify-content-end gap-3">
+                                        <a href="<?= BASE_URL ?>modules/users/users.php" class="back-btn text-decoration-none d-flex align-items-center">
+                                            <i class="fas fa-arrow-left me-2"></i> Cancel
+                                        </a>
+                                        <button type="submit" class="save-btn" id="submitBtn" disabled>
+                                            <i class="fas fa-save me-2"></i> Save Changes
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="<?= BASE_URL ?>js/scripts.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+    // Initialize Select2
+    $(document).ready(function() {
+        $('#status').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            minimumResultsForSearch: Infinity
+        });
+
+        $('#role_id').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            minimumResultsForSearch: Infinity
+        });
+
+        // Trigger change detection for Select2-managed dropdowns
+        $('#status, #role_id').on('select2:select select2:unselect', function () {
+            checkForChanges();
+        });
+    });
+
+     // Password toggle visibility
+document.querySelector('.toggle-password').addEventListener('click', function () {
+    const passwordInput = document.getElementById('password');
+    const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+    passwordInput.setAttribute('type', type);
+    this.querySelector('i').classList.toggle('fa-eye');
+    this.querySelector('i').classList.toggle('fa-eye-slash');
+});
+
+/**
+ * Enhanced Email Validation Function
+ * Performs comprehensive email validation with detailed error messages
+ */
+function validateEmail(email) {
+    // First check if email is empty
+    if (email.trim() === '') {
+        return {
+            valid: false,
+            message: 'Email address cannot be empty'
+        };
+    }
+    
+    // Check total length
+    if (email.length > 254) {
+        return {
+            valid: false,
+            message: 'Email address is too long (maximum 254 characters allowed)'
+        };
+    }
+    
+    // Check if original email contains uppercase letters
+    const lowerEmail = email.toLowerCase();
+    if (email !== lowerEmail) {
+        return {
+            valid: false,
+            message: 'Email address must be in lowercase only'
+        };
+    }
+    
+    // Split email into parts for detailed validation
+    const parts = email.split('@');
+    if (parts.length !== 2) {
+        return {
+            valid: false,
+            message: 'Email must contain exactly one @ symbol'
+        };
+    }
+    
+    const username = parts[0];
+    const domain = parts[1];
+    
+    // Username part validation
+    if (username.length === 0) {
+        return {
+            valid: false,
+            message: 'Username part of email cannot be empty'
+        };
+    }
+    
+    if (username.length > 64) {
+        return {
+            valid: false,
+            message: 'Username part of email is too long (maximum 64 characters allowed)'
+        };
+    }
+    
+    // Check for invalid patterns in username
+    if (/^\.|\.$|\.\./.test(username)) {
+        return {
+            valid: false,
+            message: 'Username cannot start or end with a period or contain consecutive periods'
+        };
+    }
+    
+    // Check for invalid characters in username
+    if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(username)) {
+        return {
+            valid: false,
+            message: 'Username contains invalid characters'
+        };
+    }
+    
+    // Domain part validation
+    if (domain.length === 0) {
+        return {
+            valid: false,
+            message: 'Domain part of email cannot be empty'
+        };
+    }
+    
+    if (!domain.includes('.')) {
+        return {
+            valid: false,
+            message: 'Email domain must include at least one period'
+        };
+    }
+    
+    // Check for invalid patterns in domain
+    if (/^-|-$/.test(domain)) {
+        return {
+            valid: false,
+            message: 'Domain cannot start or end with a hyphen'
+        };
+    }
+    
+    // Domain parts validation
+    const domainParts = domain.split('.');
+    
+    // Check domain name (part before TLD)
+    if (domainParts[0].length > 63) {
+        return {
+            valid: false,
+            message: 'Domain name is too long (maximum 63 characters allowed)'
+        };
+    }
+    
+    // Check for invalid characters in domain
+    if (!/^[a-z0-9.-]+$/i.test(domain)) {
+        return {
+            valid: false,
+            message: 'Domain contains invalid characters'
+        };
+    }
+    
+    // Check TLD (last part)
+    const tld = domainParts[domainParts.length - 1];
+    if (tld.length < 2 || tld.length > 10) {
+        return {
+            valid: false,
+            message: 'Email TLD (domain ending) is invalid'
+        };
+    }
+    
+    // Check if TLD contains only letters (no numbers or special chars)
+    if (!/^[a-z]+$/i.test(tld)) {
+        return {
+            valid: false,
+            message: 'TLD can only contain letters'
+        };
+    }
+    
+    // Complex email regex pattern for final validation
+    const emailRegex = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+    if (!emailRegex.test(email)) {
+        return {
+            valid: false,
+            message: 'Please enter a valid email address format (e.g., name@example.com)'
+        };
+    }
+
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+
+// Name validation function
+function validateName(name) {
+    if (name.trim() === '') {
+        return {
+            valid: false,
+            message: 'Name cannot be empty'
+        };
+    }
+    
+    if (name.length > 100) {
+        return {
+            valid: false,
+            message: 'Name is too long (maximum 100 characters allowed)'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// Address validation function
+function validateAddress(address) {
+    if (address.trim() === '' && !document.getElementById('address').hasAttribute('required')) {
+        return {
+            valid: true,
+            message: ''
+        };
+    }
+    
+    if (address.length > 255) {
+        return {
+            valid: false,
+            message: 'Address is too long (maximum 255 characters allowed)'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// Password validation function
+function validatePassword(password) {
+    // For edit user, empty password is valid (means no change)
+    if (password.trim() === '') {
+        return {
+            valid: true,
+            message: ''
+        };
+    }
+    
+    if (password.length < 8) {
+        return {
+            valid: false,
+            message: 'Password must be at least 8 characters long'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// Mobile validation function
+function validateMobile(mobile) {
+    if (mobile.trim() === '' && !document.getElementById('mobile').hasAttribute('required')) {
+        return {
+            valid: true,
+            message: ''
+        };
+    }
+    
+    // Clean the mobile number - remove all non-digit characters
+    const digits = mobile.replace(/\D/g, '');
+    
+    if (digits.length !== 10) {
+        return {
+            valid: false,
+            message: 'Mobile number must be exactly 10 digits'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// NIC validation function
+function validateNIC(nic) {
+    if (nic.trim() === '' && !document.getElementById('nic').hasAttribute('required')) {
+        return {
+            valid: true,
+            message: ''
+        };
+    }
+    
+    const nicRegex = /^([0-9]{9}[vVxX]?|[0-9]{12})$/;
+    if (!nicRegex.test(nic)) {
+        return {
+            valid: false,
+            message: 'Please enter a valid NIC number (9 digits + V/X or 12 digits)'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// Role validation function
+function validateRole(roleId) {
+    if (roleId.trim() === '') {
+        return {
+            valid: false,
+            message: 'Please select a role'
+        };
+    }
+    
+    return {
+        valid: true,
+        message: ''
+    };
+}
+
+// Setup validation for input fields with real-time feedback
+function setupValidation(inputId, validationFunction, errorId) {
+    const inputElement = document.getElementById(inputId);
+    const errorElement = document.getElementById(errorId);
+    
+    if (!inputElement || !errorElement) return () => true;
+    
+    // Real-time validation as user types (with a small delay for better UX)
+    let typingTimer;
+    const doneTypingInterval = 500; // half a second
+    
+    inputElement.addEventListener('keyup', function() {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => {
+            validateField(inputElement, validationFunction, errorElement);
+        }, doneTypingInterval);
+    });
+    
+    // Immediate validation on blur (when user leaves the field)
+    inputElement.addEventListener('blur', function() {
+        clearTimeout(typingTimer);
+        validateField(inputElement, validationFunction, errorElement);
+    });
+    
+    // Return a function that can be called to validate the field programmatically
+    return function() {
+        return validateField(inputElement, validationFunction, errorElement);
+    };
+}
+
+function validateField(inputElement, validationFunction, errorElement) {
+    // Reset validation state
+    inputElement.classList.remove('is-invalid');
+    inputElement.classList.remove('is-valid');
+    errorElement.style.display = 'none';
+    
+    const value = inputElement.value.trim();
+    
+    // Empty check for required fields
+    if (inputElement.hasAttribute('required') && value === '') {
+        inputElement.classList.add('is-invalid');
+        errorElement.textContent = `${inputElement.previousElementSibling ? inputElement.previousElementSibling.textContent.trim() : 'This field'} is required`;
+        errorElement.style.display = 'block';
+        return false;
+    }
+    
+    // Skip further validation if empty and not required
+    if (value === '' && !inputElement.hasAttribute('required')) {
+        return true;
+    }
+    
+    // Format check
+    const validationResult = validationFunction(value);
+    if (!validationResult.valid) {
+        inputElement.classList.add('is-invalid');
+        errorElement.textContent = validationResult.message;
+        errorElement.style.display = 'block';
+        
+        
+        return false;
+    } else {
+        // Show valid feedback
+        inputElement.classList.add('is-valid');
+        return true;
+    }
+}
+
+// Auto-convert email to lowercase
+const emailInput = document.getElementById('email');
+emailInput.addEventListener('input', function() {
+    // Get cursor position before change
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+    
+    // Convert to lowercase
+    this.value = this.value.toLowerCase();
+    
+    // Restore cursor position
+    this.setSelectionRange(start, end);
+});
+
+// Mobile handling - strip non-digits as user types
+const mobileInput = document.getElementById('mobile');
+mobileInput.addEventListener('input', function(e) {
+    // Get only digits from the input
+    let digits = this.value.replace(/\D/g, '');
+    
+    // Store cursor position
+    const cursorPos = this.selectionStart;
+    const oldLength = this.value.length;
+    
+    // Limit to 10 digits
+    if (digits.length > 10) {
+        digits = digits.substring(0, 10);
+    }
+    
+    // Update the input value with only digits
+    this.value = digits;
+    
+    // Adjust cursor position if text changed
+    const newLength = this.value.length;
+    const cursorAdjust = newLength - oldLength;
+    
+    // Only set selection range if the element is focused
+    if (document.activeElement === this) {
+        let newPos = cursorPos + cursorAdjust;
+        if (newPos < 0) newPos = 0;
+        if (newPos > this.value.length) newPos = this.value.length;
+        this.setSelectionRange(newPos, newPos);
+    }
+});
+
+// Initialize validation functions for each field
+const validateEmailField = setupValidation('email', validateEmail, 'email-error');
+const validateNameField = setupValidation('name', validateName, 'name-error');
+const validatePasswordField = setupValidation('password', validatePassword, 'password-error');
+const validateMobileField = setupValidation('mobile', validateMobile, 'mobile-error');
+const validateNICField = setupValidation('nic', validateNIC, 'nic-error');
+const validateAddressField = setupValidation('address', validateAddress, 'address-error');
+const validateRoleField = setupValidation('role_id', validateRole, 'role-error');
+
+// Client-side form validation
+document.getElementById('editUserForm').addEventListener('submit', function(event) {
+    let isValid = true;
+    
+    // Validate all fields
+    if (!validateNameField()) isValid = false;
+    if (!validateEmailField()) isValid = false;
+    if (!validatePasswordField()) isValid = false;
+    if (!validateMobileField()) isValid = false;
+    if (!validateNICField()) isValid = false;
+    if (!validateAddressField()) isValid = false;
+    if (!validateRoleField()) isValid = false;
+    
+    if (!isValid) {
+        event.preventDefault();
+        
+        // Scroll to the first error
+        const firstError = document.querySelector('.is-invalid');
+        if (firstError) {
+            firstError.focus();
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+    }
+
+    // Check if any field has changed
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id'];
+    let hasChanged = false;
+    for (const id of fields) {
+        const el = document.getElementById(id);
+        if (el && !el.disabled && el.value !== el.getAttribute('data-original')) {
+            hasChanged = true;
+            break;
+        }
+    }
+    // Password field: if filled in, treat as a change
+    const pwEl = document.getElementById('password');
+    if (pwEl && pwEl.value.trim() !== '') {
+        hasChanged = true;
+    }
+
+    if (!hasChanged) {
+        event.preventDefault();
+    }
+});
+
+// Enable/disable submit button based on whether any field changed
+function checkForChanges() {
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id'];
+    let hasChanged = false;
+    for (const id of fields) {
+        const el = document.getElementById(id);
+        if (el && !el.disabled && el.value !== el.getAttribute('data-original')) {
+            hasChanged = true;
+            break;
+        }
+    }
+    const pwEl = document.getElementById('password');
+    if (pwEl && pwEl.value.trim() !== '') {
+        hasChanged = true;
+    }
+    document.getElementById('submitBtn').disabled = !hasChanged;
+}
+
+// Attach listeners to all tracked fields
+['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'password'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener('input', checkForChanges);
+        el.addEventListener('change', checkForChanges);
+    }
+});
+
+
+    </script>
+</body>
+</html>
+
+<?php
+// Close the connection at the end of the script
+$conn->close();
+?>
