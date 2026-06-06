@@ -103,7 +103,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ];
         }
         
-        $total_amount = $subtotal - $total_discount;
+        $vat_amount = isset($_POST['vat_amount']) ? floatval($_POST['vat_amount']) : 0;
+        $total_amount = ($subtotal - $total_discount) + $vat_amount;
         
         // Update the quotation
         $updateQSql = "UPDATE quotations SET 
@@ -113,12 +114,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         subject = ?,
                         subtotal = ?,
                         discount = ?,
+                        vat = ?,
                         total_amount = ?,
                         notes = ?,
                         currency = ?
                        WHERE quotation_id = ?";
         $stmt = $conn->prepare($updateQSql);
-        $stmt->bind_param("issddddssi", $customer_id, $q_date, $e_date, $subject, $subtotal, $total_discount, $total_amount, $notes, $currency, $quotation_id);
+        $stmt->bind_param("issddddddsi", $customer_id, $q_date, $e_date, $subject, $subtotal, $total_discount, $vat_amount, $total_amount, $notes, $currency, $quotation_id);
         $stmt->execute();
         
         // Delete existing items and re-insert

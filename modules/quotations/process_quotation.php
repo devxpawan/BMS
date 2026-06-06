@@ -75,12 +75,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ];
         }
         
-        $total_amount = $subtotal - $total_discount;
+        $vat_amount = isset($_POST['vat_amount']) ? floatval($_POST['vat_amount']) : 0;
+        $total_amount = ($subtotal - $total_discount) + $vat_amount;
         
         // Insert Quotation
-        $insertQSql = "INSERT INTO quotations (customer_id, user_id, quotation_date, expiry_date, subject, subtotal, discount, total_amount, notes, currency, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $insertQSql = "INSERT INTO quotations (customer_id, user_id, quotation_date, expiry_date, subject, subtotal, discount, vat, total_amount, notes, currency, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($insertQSql);
-        $stmt->bind_param("iisssdddsssi", $customer_id, $user_id, $q_date, $e_date, $subject, $subtotal, $total_discount, $total_amount, $notes, $currency, $status, $user_id);
+        $stmt->bind_param("iisssddddsssi", $customer_id, $user_id, $q_date, $e_date, $subject, $subtotal, $total_discount, $vat_amount, $total_amount, $notes, $currency, $status, $user_id);
         $stmt->execute();
         $quotation_id = $conn->insert_id;
         

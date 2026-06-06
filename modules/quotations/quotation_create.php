@@ -637,6 +637,26 @@ $customerResult = $conn->query($customerSql);
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT %:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" id="vat_percentage" name="vat_percentage"
+                                                        class="form-control text-end" value="0" min="0" step="0.01" style="text-align: right;">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT Amount:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text currency-symbol">Rs.</span>
+                                                    <input type="text" id="vat_amount" name="vat_amount"
+                                                        class="form-control text-end" value="0.00" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div class="row pt-2" style="border-top: 1px solid #eaecf0;">
                                             <div class="col-6 text-end py-1"><strong>Total:</strong></div>
                                             <div class="col-6 py-1">
@@ -825,7 +845,13 @@ $customerResult = $conn->query($customerSql);
 
             $('#subtotal_amount').val(subtotal.toFixed(2));
             $('#discount_amount').val(totalDiscount.toFixed(2));
-            $('#total_amount').val((subtotal - totalDiscount).toFixed(2));
+
+            let netTotal = subtotal - totalDiscount;
+            let vatPct = parseFloat($('#vat_percentage').val()) || 0;
+            let vatAmt = netTotal * vatPct / 100;
+            $('#vat_amount').val(vatAmt.toFixed(2));
+
+            $('#total_amount').val((netTotal + vatAmt).toFixed(2));
         }
 
         // Customer Selection
@@ -859,6 +885,101 @@ $customerResult = $conn->query($customerSql);
             customerModal.style.display = "none";
         });
 
+        // Validation functions
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        function isValidPhoneNumber(phone) {
+            const phoneRegex = /^\d{10}$/;
+            return phoneRegex.test(phone);
+        }
+
+        function validateCustomerInfo() {
+            const customerName = $('#customer_name').val().trim();
+            const customerEmail = $('#customer_email').val().trim();
+            const customerPhone = $('#customer_phone').val().trim();
+
+            $('.validation-error').remove();
+            let isValid = true;
+
+            if (customerName === '') {
+                $('#customer_name').after('<div class="text-danger validation-error">Customer name is required</div>');
+                isValid = false;
+            }
+
+            if (customerEmail !== '' && !isValidEmail(customerEmail)) {
+                $('#customer_email').after('<div class="text-danger validation-error">Invalid email format</div>');
+                isValid = false;
+            }
+
+            if (customerPhone !== '' && !isValidPhoneNumber(customerPhone)) {
+                $('#customer_phone').after('<div class="text-danger validation-error">Phone number must be 10 digits</div>');
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        // Form submission validation
+        $('#quotationForm').on('submit', function (e) {
+            if (!validateCustomerInfo()) {
+                e.preventDefault();
+                return false;
+            }
+
+            if ($('#quotation_table tbody tr').length === 0) {
+                showToast('warning', 'Please add at least one product to the quotation.');
+                e.preventDefault();
+                return false;
+            }
+
+            let isProductValid = true;
+            $('#quotation_table tbody tr').each(function () {
+                let productSelect = $(this).find('.product-select');
+                if (productSelect.val() === "") {
+                    showToast('warning', 'Please select a product for all quotation lines.');
+                    isProductValid = false;
+                    return false;
+                }
+            });
+
+            if (!isProductValid) {
+                e.preventDefault();
+                return false;
+            }
+
+            let totalAmount = parseFloat($('#total_amount').val()) || 0;
+            if (totalAmount <= 0) {
+                showToast('warning', 'Invalid Total Amount!');
+                e.preventDefault();
+                return false;
+            }
+
+            setTimeout(function() {
+                location.reload();
+            }, 2000);
+            return true;
+        });
+
+        // Real-time validation
+        $('#customer_email').on('input', function () {
+            $('.validation-error').remove();
+            const email = $(this).val().trim();
+            if (email !== '' && !isValidEmail(email)) {
+                $(this).after('<div class="text-danger validation-error">Invalid email format</div>');
+            }
+        });
+
+        $('#customer_phone').on('input', function () {
+            $('.validation-error').remove();
+            const phone = $(this).val().trim();
+            if (phone !== '' && !isValidPhoneNumber(phone)) {
+                $(this).after('<div class="text-danger validation-error">Phone number must be 10 digits</div>');
+            }
+        });
+
         // Product Rows
         function renumberRows() {
             $('#quotation_table tbody tr').each(function(index) {
@@ -878,7 +999,22 @@ $customerResult = $conn->query($customerSql);
             newRow.find('.subtotal').val('0.00');
             newRow.find('.product-select').val('');
             $('#quotation_table tbody').append(newRow);
-            $('.product-select').select2({ theme: 'bootstrap-5', width: '100%' });
+            $('.product-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                tags: true,
+                createTag: function (params) {
+                    var term = $.trim(params.term);
+                    if (term === '') {
+                        return null;
+                    }
+                    return {
+                        id: term,
+                        text: term,
+                        newTag: true
+                    }
+                }
+            });
             renumberRows();
         });
 
@@ -893,19 +1029,13 @@ $customerResult = $conn->query($customerSql);
         });
 
         $(document).on('change', '.product-select', function () { updateProductPrice($(this).closest('tr')); });
+        $(document).on('input', '#vat_percentage', function () { updateTotals(); });
         $(document).on('input', '.price, .qty, .discount', function () { 
             if ($(this).hasClass('discount') || $(this).hasClass('qty')) {
                 let value = $(this).val();
                 $(this).val(value.replace(/[^0-9]/g, ''));
             }
             updateRowTotal($(this).closest('tr')); 
-        });
-        
-        // Refresh page after 1 second of form submission to clear fields
-        $('#quotationForm').on('submit', function() {
-            setTimeout(function() {
-                location.reload();
-            }, 1000);
         });
         
         // Update expiry date when quotation date changes

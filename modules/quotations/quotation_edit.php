@@ -678,6 +678,31 @@ $result = $conn->query($sql);
                                                 </div>
                                             </div>
                                         </div>
+                                        <?php
+                                        $qvat = floatval($quotation['vat'] ?? 0);
+                                        $qnet = floatval($quotation['subtotal'] ?? 0) - floatval($quotation['discount'] ?? 0);
+                                        $qvat_pct = ($qnet > 0) ? ($qvat / $qnet * 100) : 0;
+                                        ?>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT %:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" id="vat_percentage" name="vat_percentage"
+                                                        class="form-control text-end" value="<?php echo number_format($qvat_pct, 2, '.', ''); ?>" min="0" step="0.01" style="text-align: right;">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT Amount:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text currency-symbol">Rs.</span>
+                                                    <input type="text" id="vat_amount" name="vat_amount"
+                                                        class="form-control text-end" value="<?php echo number_format($qvat, 2, '.', ''); ?>" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div class="row pt-2" style="border-top: 1px solid #eaecf0;">
                                             <div class="col-6 text-end py-1"><strong>Total:</strong></div>
                                             <div class="col-6 py-1">
@@ -799,7 +824,13 @@ $result = $conn->query($sql);
 
             $('#subtotal_amount').val(subtotal.toFixed(2));
             $('#discount_amount').val(totalDiscount.toFixed(2));
-            $('#total_amount').val((subtotal - totalDiscount).toFixed(2));
+
+            let netTotal = subtotal - totalDiscount;
+            let vatPct = parseFloat($('#vat_percentage').val()) || 0;
+            let vatAmt = netTotal * vatPct / 100;
+            $('#vat_amount').val(vatAmt.toFixed(2));
+
+            $('#total_amount').val((netTotal + vatAmt).toFixed(2));
         }
 
         function renumberRows() {
@@ -820,7 +851,22 @@ $result = $conn->query($sql);
             newRow.find('.subtotal').val('0.00');
             newRow.find('.product-select').val('');
             $('#quotation_table tbody').append(newRow);
-            $('.product-select').select2({ theme: 'bootstrap-5', width: '100%' });
+            $('.product-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                tags: true,
+                createTag: function (params) {
+                    var term = $.trim(params.term);
+                    if (term === '') {
+                        return null;
+                    }
+                    return {
+                        id: term,
+                        text: term,
+                        newTag: true
+                    }
+                }
+            });
             renumberRows();
         });
 
@@ -835,6 +881,7 @@ $result = $conn->query($sql);
         });
 
         $(document).on('change', '.product-select', function () { updateProductPrice($(this).closest('tr')); });
+        $(document).on('input', '#vat_percentage', function () { updateTotals(); });
         $(document).on('input', '.price, .qty, .discount', function () { 
             if ($(this).hasClass('discount') || $(this).hasClass('qty')) {
                 let value = $(this).val();

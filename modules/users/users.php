@@ -467,6 +467,7 @@ $result = $conn->query($sql);
                     status: this.getAttribute('data-user-status'),
                     role: this.getAttribute('data-user-role'),
                     roleId: this.getAttribute('data-user-role-id'),
+                    position: this.getAttribute('data-user-position'),
                     created: this.getAttribute('data-user-created')
                 };
 
@@ -508,8 +509,8 @@ $result = $conn->query($sql);
                         </div>
                         <div class="col-md-6">
                             <div class="view-detail-box">
-                                <span class="detail-label">Role</span>
-                                <p class="detail-value">${userData.role}</p>
+                                <span class="detail-label">Position</span>
+                                <p class="detail-value">${userData.position}</p>
                             </div>
                         </div>
                         <div class="col-12">

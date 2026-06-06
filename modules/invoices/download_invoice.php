@@ -705,9 +705,16 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                         <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($total_item_discounts, 2); ?></td>
                     </tr>
                 <?php endif; ?>
+                <?php
+                $invoice_vat = floatval($invoice['vat'] ?? 0);
+                $vat_pct = 0;
+                if ($total_before_discounts > 0) {
+                    $vat_pct = ($invoice_vat / $total_before_discounts) * 100;
+                }
+                ?>
                 <tr>
-                    <td>Vat (0.0%)</td>
-                    <td style="text-align: right;"><?php echo $currencySymbol . ' 0.00'; ?></td>
+                    <td>Vat (<?php echo number_format($vat_pct, 1); ?>%)</td>
+                    <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($invoice_vat, 2); ?></td>
                 </tr>
                 <tr>
                     <td>Total</td>

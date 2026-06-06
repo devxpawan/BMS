@@ -623,9 +623,16 @@ if (!empty($quotation['ref_no'])) {
                         <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format((floatval($quotation['discount']) > 0 ? floatval($quotation['discount']) : $total_item_discounts), 2); ?></td>
                     </tr>
                 <?php endif; ?>
+                <?php
+                $qvat = floatval($quotation['vat'] ?? 0);
+                $qvat_pct = 0;
+                if ($total_before_discounts > 0) {
+                    $qvat_pct = ($qvat / $total_before_discounts) * 100;
+                }
+                ?>
                 <tr>
-                    <td>Vat (0.0%)</td>
-                    <td style="text-align: right;"><?php echo $currencySymbol . ' 0.00'; ?></td>
+                    <td>Vat (<?php echo number_format($qvat_pct, 1); ?>%)</td>
+                    <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($qvat, 2); ?></td>
                 </tr>
                 <tr>
                     <td>Total</td>

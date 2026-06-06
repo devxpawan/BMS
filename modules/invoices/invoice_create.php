@@ -642,6 +642,26 @@ $customerResult = $conn->query($customerSql);
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT %:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" id="vat_percentage" name="vat_percentage"
+                                                        class="form-control text-end" value="0" min="0" step="0.01" style="text-align: right;">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT Amount:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text currency-symbol">Rs.</span>
+                                                    <input type="text" id="vat_amount" name="vat_amount"
+                                                        class="form-control text-end" value="0.00" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div class="row pt-2" style="border-top: 1px solid #eaecf0;">
                                             <div class="col-6 text-end py-1"><strong>Total:</strong></div>
                                             <div class="col-6 py-1">
@@ -900,11 +920,16 @@ $customerResult = $conn->query($customerSql);
                 $('#subtotal_amount').val(subtotal.toFixed(2));
                 $('#discount_amount').val(totalDiscount.toFixed(2));
 
-                let total = subtotal - totalDiscount;
-                $('#total_amount').val(total.toFixed(2));
+                let netTotal = subtotal - totalDiscount;
+                let vatPct = parseFloat($('#vat_percentage').val()) || 0;
+                let vatAmt = netTotal * vatPct / 100;
+                $('#vat_amount').val(vatAmt.toFixed(2));
+
+                let grandTotal = netTotal + vatAmt;
+                $('#total_amount').val(grandTotal.toFixed(2));
 
                 // Set hidden LKR currency value
-                $('#lkr_total_amount').val(total.toFixed(2));
+                $('#lkr_total_amount').val(grandTotal.toFixed(2));
             }
 
             // Update status and pay_date when payment status changes
@@ -1019,7 +1044,10 @@ $customerResult = $conn->query($customerSql);
                     return false;
                 }
 
-                // If all validations pass, allow form submission
+                // If all validations pass, refresh this page after the new tab opens
+                setTimeout(function() {
+                    location.reload();
+                }, 1500);
                 return true;
             });
 
@@ -1055,7 +1083,19 @@ $customerResult = $conn->query($customerSql);
                 // Re-initialize Select2 on all product selects
                 $('.product-select').select2({
                     theme: 'bootstrap-5',
-                    width: '100%'
+                    width: '100%',
+                    tags: true,
+                    createTag: function (params) {
+                        var term = $.trim(params.term);
+                        if (term === '') {
+                            return null;
+                        }
+                        return {
+                            id: term,
+                            text: term,
+                            newTag: true
+                        }
+                    }
                 });
 
                 renumberRows();
@@ -1088,6 +1128,11 @@ $customerResult = $conn->query($customerSql);
                 }
             });
 
+            // Recalculate on VAT percentage change
+            $(document).on('input', '#vat_percentage', function () {
+                updateTotals();
+            });
+
             // Update on price, qty or discount change
             $(document).on('input', '.price, .qty, .discount', function () {
                 // Ensure qty and discount are whole numbers (if desired)
@@ -1096,13 +1141,6 @@ $customerResult = $conn->query($customerSql);
                     $(this).val(value.replace(/[^0-9]/g, ''));
                 }
                 updateRowTotal($(this).closest('tr'));
-            });
-
-            // Refresh page after 1 second of form submission to clear fields
-            $('#invoiceForm').on('submit', function() {
-                setTimeout(function() {
-                    location.reload();
-                }, 1000);
             });
         });
     </script>

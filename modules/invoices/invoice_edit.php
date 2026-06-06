@@ -85,6 +85,13 @@ foreach ($invoice_items as $item) {
         ];
     }
 }
+
+// Calculate VAT percentage from stored values
+$invoice_vat = floatval($invoice['vat'] ?? 0);
+$invoice_subtotal = floatval($invoice['subtotal'] ?? 0);
+$invoice_discount = floatval($invoice['discount'] ?? 0);
+$invoice_net = $invoice_subtotal - $invoice_discount;
+$invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -723,6 +730,26 @@ foreach ($invoice_items as $item) {
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT %:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" id="vat_percentage" name="vat_percentage"
+                                                        class="form-control text-end" value="<?= htmlspecialchars(number_format($invoice_vat_pct, 2, '.', '')) ?>" min="0" step="0.01" style="text-align: right;">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6 text-end py-1"><span class="text-muted">VAT Amount:</span></div>
+                                            <div class="col-6 py-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text currency-symbol">Rs.</span>
+                                                    <input type="text" id="vat_amount" name="vat_amount"
+                                                        class="form-control text-end" value="0.00" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div class="row pt-2" style="border-top: 1px solid #eaecf0;">
                                             <div class="col-6 text-end py-1"><strong>Total:</strong></div>
                                             <div class="col-6 py-1">
@@ -927,8 +954,13 @@ foreach ($invoice_items as $item) {
                 $('#subtotal_amount').val(subtotal.toFixed(2));
                 $('#discount_amount').val(totalDiscount.toFixed(2));
 
-                let total = subtotal - totalDiscount;
-                $('#total_amount').val(total.toFixed(2));
+                let netTotal = subtotal - totalDiscount;
+                let vatPct = parseFloat($('#vat_percentage').val()) || 0;
+                let vatAmt = netTotal * vatPct / 100;
+                $('#vat_amount').val(vatAmt.toFixed(2));
+
+                let grandTotal = netTotal + vatAmt;
+                $('#total_amount').val(grandTotal.toFixed(2));
             }
 
             // Customer modal
@@ -1101,6 +1133,10 @@ foreach ($invoice_items as $item) {
 
                     $('input[name="due_date"]').val(`${year}-${month}-${day}`);
                 }
+            });
+
+            $(document).on('input', '#vat_percentage', function () {
+                updateTotals();
             });
 
             $(document).on('input', '.price, .qty, .discount', function () {

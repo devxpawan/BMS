@@ -122,8 +122,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ];
         }
         
+        // VAT calculation
+        $vat_amount = isset($_POST['vat_amount']) ? floatval($_POST['vat_amount']) : 0;
+        
         // Final total calculation
-        $total_amount = $subtotal - $total_discount;
+        $total_amount = ($subtotal - $total_discount) + $vat_amount;
         
         // Validate total amount is greater than 0
         if ($total_amount <= 0) {
@@ -133,15 +136,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Insert invoice - UPDATED to include created_by column
         $insertInvoiceSql = "INSERT INTO invoices (
             customer_id, user_id, issue_date, due_date, 
-            subtotal, discount, total_amount, 
+            subtotal, discount, vat, total_amount, 
             notes, currency, status, pay_status, pay_date, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $conn->prepare($insertInvoiceSql);
         $stmt->bind_param(
-            "iissdddsssssi", 
+            "iissddddsssssi", 
             $customer_id, $user_id, $invoice_date, $due_date, 
-            $subtotal, $total_discount, $total_amount, 
+            $subtotal, $total_discount, $vat_amount, $total_amount, 
             $notes, $currency, $status, $pay_status, $pay_date, $user_id
         );
         $stmt->execute();

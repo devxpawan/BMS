@@ -170,7 +170,8 @@ try {
         ];
     }
 
-    $total_amount = $subtotal - $total_discount;
+    $vat_amount = isset($_POST['vat_amount']) ? floatval($_POST['vat_amount']) : 0;
+    $total_amount = ($subtotal - $total_discount) + $vat_amount;
     if ($total_amount <= 0) {
         throw new Exception("Invoice total amount must be greater than 0. Please ensure the products selected have a valid price.");
     }
@@ -181,6 +182,7 @@ try {
         due_date = ?,
         subtotal = ?,
         discount = ?,
+        vat = ?,
         total_amount = ?,
         notes = ?,
         currency = ?
@@ -188,12 +190,13 @@ try {
 
     $stmt = $conn->prepare($updateInvoiceSql);
     $stmt->bind_param(
-        "isddddssi",
+        "isdddddssi",
         $customer_id,
         $invoice_date,
         $due_date,
         $subtotal,
         $total_discount,
+        $vat_amount,
         $total_amount,
         $notes,
         $currency,
