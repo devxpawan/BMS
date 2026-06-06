@@ -72,6 +72,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $prices = $_POST['quotation_product_price'];
         $qtys = $_POST['quotation_product_qty'] ?? [];
         $discounts = $_POST['quotation_product_discount'] ?? [];
+        $discount_types = $_POST['quotation_product_discount_type'] ?? [];
         $descriptions = $_POST['quotation_product_description'] ?? [];
         
         $subtotal = 0;
@@ -81,10 +82,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         foreach ($products as $key => $product_val) {
             $price = floatval($prices[$key] ?? 0);
             $qty = intval($qtys[$key] ?? 1);
-            $discount = floatval($discounts[$key] ?? 0);
+            $discount_val = floatval($discounts[$key] ?? 0);
+            $discount_type = $discount_types[$key] ?? 'flat';
             $desc = $descriptions[$key] ?? '';
             
             $row_total = $price * $qty;
+            
+            if ($discount_type === 'percentage') {
+                $discount = $row_total * $discount_val / 100;
+            } else {
+                $discount = $discount_val;
+            }
             
             $subtotal += $row_total;
             $total_discount += $discount;
@@ -98,6 +106,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 'price' => $price,
                 'qty' => $qty,
                 'discount' => $discount,
+                'discount_type' => $discount_type,
                 'description' => $desc,
                 'total' => $row_total - $discount
             ];
@@ -130,11 +139,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->execute();
         
         // Insert updated items
-        $insertItemSql = "INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, description, price, discount, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        $insertItemSql = "INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, description, price, discount, discount_type, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($insertItemSql);
         
         foreach ($items_to_insert as $item) {
-            $stmt->bind_param("iisisddd", $quotation_id, $item['product_id'], $item['product_name'], $item['qty'], $item['description'], $item['price'], $item['discount'], $item['total']);
+            $stmt->bind_param("iisisddsd", $quotation_id, $item['product_id'], $item['product_name'], $item['qty'], $item['description'], $item['price'], $item['discount'], $item['discount_type'], $item['total']);
             $stmt->execute();
         }
         

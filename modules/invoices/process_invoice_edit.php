@@ -135,6 +135,7 @@ try {
     $product_prices = $_POST['invoice_product_price'];
     $product_qtys = $_POST['invoice_product_qty'] ?? [];
     $discounts = $_POST['invoice_product_discount'] ?? [];
+    $discount_types = $_POST['invoice_product_discount_type'] ?? [];
     $product_descriptions = $_POST['invoice_product_description'] ?? [];
 
     $subtotal = 0;
@@ -147,10 +148,17 @@ try {
         }
         $price = floatval($product_prices[$key] ?? 0);
         $qty = intval($product_qtys[$key] ?? 1);
-        $discount = floatval($discounts[$key] ?? 0);
+        $discount_val = floatval($discounts[$key] ?? 0);
+        $discount_type = $discount_types[$key] ?? 'flat';
         $description = $product_descriptions[$key] ?? '';
 
         $row_total = $price * $qty;
+
+        if ($discount_type === 'percentage') {
+            $discount = $row_total * $discount_val / 100;
+        } else {
+            $discount = $discount_val;
+        }
         $discount = min($discount, $row_total);
 
         $subtotal += $row_total;
@@ -166,6 +174,7 @@ try {
             'price' => $price,
             'qty' => $qty,
             'discount' => $discount,
+            'discount_type' => $discount_type,
             'description' => $description
         ];
     }
@@ -210,9 +219,9 @@ try {
     $stmt->execute();
 
     $insertItemSql = "INSERT INTO invoice_items (
-        invoice_id, product_id, product_name, quantity, discount,
+        invoice_id, product_id, product_name, quantity, discount, discount_type,
         total_amount, pay_status, status, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($insertItemSql);
 
     foreach ($invoice_items as $item) {
@@ -220,12 +229,13 @@ try {
         $pay_status = 'unpaid';
         $status = 'pending';
         $stmt->bind_param(
-            "iisiddsss",
+            "iisidsdsss",
             $invoice_id,
             $item['product_id'],
             $item['product_name'],
             $item['qty'],
             $item['discount'],
+            $item['discount_type'],
             $item_total,
             $pay_status,
             $status,

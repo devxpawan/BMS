@@ -86,6 +86,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $product_prices = $_POST['invoice_product_price'];
         $product_qtys = $_POST['invoice_product_qty'] ?? [];
         $discounts = $_POST['invoice_product_discount'] ?? [];
+        $discount_types = $_POST['invoice_product_discount_type'] ?? [];
         $product_descriptions = $_POST['invoice_product_description'] ?? [];
         $subtotal = 0;
         $total_discount = 0;
@@ -95,10 +96,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         foreach ($products as $key => $product_val) {
             $price = floatval($product_prices[$key] ?? 0);
             $qty = intval($product_qtys[$key] ?? 1);
-            $discount = floatval($discounts[$key] ?? 0);
+            $discount_val = floatval($discounts[$key] ?? 0);
+            $discount_type = $discount_types[$key] ?? 'flat';
             $description = $product_descriptions[$key] ?? '';
             
             $row_total = $price * $qty;
+            
+            // Calculate flat discount based on type
+            if ($discount_type === 'percentage') {
+                $discount = $row_total * $discount_val / 100;
+            } else {
+                $discount = $discount_val;
+            }
             
             // Ensure discount doesn't exceed row total
             $discount = min($discount, $row_total);
@@ -118,6 +127,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 'price' => $price,
                 'qty' => $qty,
                 'discount' => $discount,
+                'discount_type' => $discount_type,
                 'description' => $description
             ];
         }
@@ -159,20 +169,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         // Invoice items insertion
         $insertItemSql = "INSERT INTO invoice_items (
-            invoice_id, product_id, product_name, quantity, discount, 
+            invoice_id, product_id, product_name, quantity, discount, discount_type,
             total_amount, pay_status, status, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($insertItemSql);
         
         foreach ($invoice_items as $item) {
             $item_total = ($item['price'] * $item['qty']) - $item['discount'];
             $stmt->bind_param(
-                "iisiddsss", 
+                "iisidsdsss", 
                 $invoice_id, 
                 $item['product_id'],
                 $item['product_name'],
                 $item['qty'],
-                $item['discount'], 
+                $item['discount'],
+                $item['discount_type'],
                 $item_total, 
                 $pay_status, 
                 $status, 

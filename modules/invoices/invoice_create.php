@@ -125,6 +125,32 @@ $customerResult = $conn->query($customerSql);
             white-space: nowrap;
         }
 
+        .discount-group .discount-type-btn {
+            font-size: 10px;
+            padding: 0 6px;
+            height: 28px;
+            line-height: 26px;
+            border-radius: 0;
+        }
+        .discount-group .discount-type-btn:first-of-type {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .discount-group .discount-type-btn:last-of-type {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        .discount-group .discount-type-btn.active {
+            background: #303361;
+            border-color: #303361;
+            color: #fff;
+        }
+        .discount-group input.form-control.discount {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            min-width: 50px;
+        }
+
         #invoice_table tbody td {
             padding: 10px 8px;
             vertical-align: middle;
@@ -556,7 +582,7 @@ $customerResult = $conn->query($customerSql);
                                                 <th style="width: 200px;">Description</th>
                                                 <th style="width: 110px;">Price</th>
                                                 <th style="width: 60px;">Qty</th>
-                                                <th style="width: 60px;">Disc%</th>
+                                                <th style="width: 130px;">Discount</th>
                                                 <th style="width: 110px;">Subtotal</th>
                                                 <th style="width: 36px;"></th>
                                             </tr>
@@ -595,8 +621,13 @@ $customerResult = $conn->query($customerSql);
                                                         class="form-control qty" value="1" min="1" step="1">
                                                 </td>
                                                 <td>
-                                                    <input type="number" name="invoice_product_discount[]"
-                                                        class="form-control discount" value="0" min="0" step="1">
+                                                    <div class="input-group input-group-sm discount-group">
+                                                        <input type="number" name="invoice_product_discount[]"
+                                                            class="form-control discount" value="0" min="0" step="0.01">
+                                                        <button type="button" class="btn btn-outline-secondary discount-type-btn active" data-type="flat">Rs.</button>
+                                                        <button type="button" class="btn btn-outline-secondary discount-type-btn" data-type="percentage">%</button>
+                                                    </div>
+                                                    <input type="hidden" name="invoice_product_discount_type[]" class="discount-type-hidden" value="flat">
                                                 </td>
                                                 <td>
                                                     <div class="input-group input-group-sm">
@@ -873,21 +904,39 @@ $customerResult = $conn->query($customerSql);
                 updateRowTotal(row);
             }
 
+            // Get the flat discount amount for a row based on discount type
+            function getFlatDiscount(row) {
+                let price = parseFloat(row.find('.price').val()) || 0;
+                let qty = parseFloat(row.find('.qty').val()) || 0;
+                let discountVal = parseFloat(row.find('.discount').val()) || 0;
+                let discountType = row.find('.discount-type-hidden').val() || 'flat';
+                let row_total = price * qty;
+
+                if (discountType === 'percentage') {
+                    return row_total * discountVal / 100;
+                }
+                return discountVal;
+            }
+
             // Updated Row Total Calculation Function
             function updateRowTotal(row) {
                 let price = parseFloat(row.find('.price').val()) || 0;
                 let qty = parseFloat(row.find('.qty').val()) || 0;
-                let discount = parseFloat(row.find('.discount').val()) || 0;
-
                 let row_total = price * qty;
+                let flatDiscount = getFlatDiscount(row);
 
                 // Ensure discount doesn't exceed row total
-                if (discount > row_total) {
-                    discount = row_total;
-                    row.find('.discount').val(discount);
+                if (flatDiscount > row_total) {
+                    flatDiscount = row_total;
+                    if ((row.find('.discount-type-hidden').val() || 'flat') === 'percentage') {
+                        let pct = row_total > 0 ? 100 : 0;
+                        row.find('.discount').val(pct.toFixed(2));
+                    } else {
+                        row.find('.discount').val(flatDiscount);
+                    }
                 }
 
-                let subtotal = row_total - discount;
+                let subtotal = row_total - flatDiscount;
                 row.find('.subtotal').val(subtotal.toFixed(2));
                 updateTotals();
             }
@@ -900,21 +949,25 @@ $customerResult = $conn->query($customerSql);
                 $('#invoice_table tbody tr').each(function () {
                     let rowPrice = parseFloat($(this).find('.price').val()) || 0;
                     let rowQty = parseFloat($(this).find('.qty').val()) || 0;
-                    let rowDiscount = parseFloat($(this).find('.discount').val()) || 0;
-
                     let row_total = rowPrice * rowQty;
+                    let flatDiscount = getFlatDiscount($(this));
 
                     // Ensure discount doesn't exceed row total
-                    if (rowDiscount > row_total) {
-                        rowDiscount = row_total;
-                        $(this).find('.discount').val(rowDiscount);
+                    if (flatDiscount > row_total) {
+                        flatDiscount = row_total;
+                        if (($(this).find('.discount-type-hidden').val() || 'flat') === 'percentage') {
+                            let pct = row_total > 0 ? 100 : 0;
+                            $(this).find('.discount').val(pct.toFixed(2));
+                        } else {
+                            $(this).find('.discount').val(flatDiscount);
+                        }
                     }
 
-                    let rowSubtotal = row_total - rowDiscount;
+                    let rowSubtotal = row_total - flatDiscount;
                     $(this).find('.subtotal').val(rowSubtotal.toFixed(2));
 
                     subtotal += row_total;
-                    totalDiscount += rowDiscount;
+                    totalDiscount += flatDiscount;
                 });
 
                 $('#subtotal_amount').val(subtotal.toFixed(2));
@@ -1076,6 +1129,9 @@ $customerResult = $conn->query($customerSql);
                 newRow.find('.price').val('0.00');
                 newRow.find('.qty').val('1');
                 newRow.find('.discount').val('0');
+                newRow.find('.discount-type-hidden').val('flat');
+                newRow.find('.discount-group .discount-type-btn').removeClass('active');
+                newRow.find('.discount-group .discount-type-btn[data-type="flat"]').addClass('active');
                 newRow.find('.subtotal').val('0.00');
                 newRow.find('.product-select').val('');
                 $('#invoice_table tbody').append(newRow);
@@ -1113,6 +1169,17 @@ $customerResult = $conn->query($customerSql);
                 }
             });
 
+            // Discount type toggle
+            $(document).on('click', '.discount-type-btn', function () {
+                let btnGroup = $(this).closest('.discount-group');
+                btnGroup.find('.discount-type-btn').removeClass('active');
+                $(this).addClass('active');
+                let type = $(this).data('type');
+                let row = $(this).closest('tr');
+                row.find('.discount-type-hidden').val(type);
+                updateRowTotal(row);
+            });
+
             // Update due date when invoice date changes
             $('input[name="invoice_date"]').on('change', function() {
                 const invoiceDate = new Date($(this).val());
@@ -1135,8 +1202,7 @@ $customerResult = $conn->query($customerSql);
 
             // Update on price, qty or discount change
             $(document).on('input', '.price, .qty, .discount', function () {
-                // Ensure qty and discount are whole numbers (if desired)
-                if ($(this).hasClass('discount') || $(this).hasClass('qty')) {
+                if ($(this).hasClass('qty')) {
                     let value = $(this).val();
                     $(this).val(value.replace(/[^0-9]/g, ''));
                 }
