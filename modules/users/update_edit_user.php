@@ -59,6 +59,7 @@ $mobile = isset($_POST['mobile']) ? trim($_POST['mobile']) : '';
 $nic = isset($_POST['nic']) ? trim($_POST['nic']) : '';
 $address = isset($_POST['address']) ? trim($_POST['address']) : '';
 $password = isset($_POST['password']) ? trim($_POST['password']) : '';
+$position_id = isset($_POST['position_id']) && !empty($_POST['position_id']) ? intval($_POST['position_id']) : null;
 
 // Validate email format
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -110,8 +111,6 @@ if ($role_result->num_rows === 0) {
 }
 $role_check_stmt->close();
 
-// Profile image management is disabled in this system
-
 // Prepare database operation for updating user
 try {
     $conn->begin_transaction();
@@ -128,7 +127,7 @@ try {
     
     // Fetch the original user data to track changes
     $original_user_stmt = $conn->prepare("
-        SELECT name, email, status, role_id, mobile, nic, address
+        SELECT name, email, status, role_id, mobile, nic, address, position_id
         FROM users WHERE id = ?
     ");
     $original_user_stmt->bind_param("i", $user_id);
@@ -175,31 +174,44 @@ try {
     if ($original_user['address'] !== $address) {
         $changes[] = "Address was updated";
     }
+    if (($original_user['position_id'] ?? '') != ($position_id ?? '')) {
+        // Get position names for better logging
+        $pos_names_stmt = $conn->prepare("
+            SELECT COALESCE((SELECT name FROM positions WHERE id = ?), 'None') as old_pos,
+                   COALESCE((SELECT name FROM positions WHERE id = ?), 'None') as new_pos
+        ");
+        $pos_names_stmt->bind_param("ii", $original_user['position_id'], $position_id);
+        $pos_names_stmt->execute();
+        $pos_result = $pos_names_stmt->get_result();
+        $pos_names = $pos_result->fetch_assoc();
+        $pos_names_stmt->close();
+        
+        $changes[] = "Position changed from '{$pos_names['old_pos']}' to '{$pos_names['new_pos']}'";
+    }
     
     // Prepare SQL based on whether password is being updated
     if (!empty($password)) {
         // Hash the password if it's being updated
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         
-        // Update with new password
+        // Update with new password and position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, password = ?, status = ?, role_id = ?, 
+            SET name = ?, email = ?, password = ?, status = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("ssssisssi", $name, $email, $hashed_password, $status, $role_id, 
-                                $mobile, $nic, $address, $user_id);
+        $update_stmt->bind_param("ssssiisssi", $name, $email, $hashed_password, $status, $role_id, 
+                                $position_id, $mobile, $nic, $address, $user_id);
     } else {
-        // Don't update password
-        // Update without changing password
+        // Update without changing password, but with position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, status = ?, role_id = ?, 
+            SET name = ?, email = ?, status = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("sssisssi", $name, $email, $status, $role_id, 
+        $update_stmt->bind_param("sssiisssi", $name, $email, $status, $role_id, $position_id, 
                                 $mobile, $nic, $address, $user_id);
     }
     
@@ -212,9 +224,9 @@ try {
     $update_stmt->close();
     
     // Log the user edit action with detailed changes
-    $logged_in_user_id = $_SESSION['user_id']; // Adjust if your session variable uses a different name
+    $logged_in_user_id = $_SESSION['user_id'];
     $action_type = 'edit_user';
-    $inquiry_id = 0; // or NULL if your table allows NULL values for this field
+    $inquiry_id = 0;
     
     // Prepare the details message
     $change_details = !empty($changes) ? 

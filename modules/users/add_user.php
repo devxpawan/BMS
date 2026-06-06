@@ -47,6 +47,15 @@ $roleResult = $conn->query($roleQuery);
 while ($roleRow = $roleResult->fetch_assoc()) {
     $roles[] = $roleRow;
 }
+
+// Fetch available positions dynamically
+$positions = [];
+$positionQuery = "SELECT id, name FROM positions WHERE status = 'active'";
+$positionResult = $conn->query($positionQuery);
+
+while ($positionRow = $positionResult->fetch_assoc()) {
+    $positions[] = $positionRow;
+}
 ?>
 
 <!DOCTYPE html>
@@ -189,6 +198,19 @@ while ($roleRow = $roleResult->fetch_assoc()) {
                                             </select>
                                             <div class="error-feedback" id="role-error"></div>
                                         </div>
+
+                                        <!-- Position Field - Dynamically Populated -->
+                                        <div class="mb-3">
+                                            <label for="position_id" class="form-label">Position</label>
+                                            <select class="form-select" id="position_id" name="position_id">
+                                                <option value="" selected>Select Position (Optional)...</option>
+                                                <?php foreach ($positions as $position): ?>
+                                                    <option value="<?= htmlspecialchars($position['id']) ?>">
+                                                        <?= htmlspecialchars($position['name']) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -227,6 +249,12 @@ while ($roleRow = $roleResult->fetch_assoc()) {
         });
 
         $('#role_id').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            minimumResultsForSearch: Infinity
+        });
+
+        $('#position_id').select2({
             theme: 'bootstrap-5',
             width: '100%',
             minimumResultsForSearch: Infinity

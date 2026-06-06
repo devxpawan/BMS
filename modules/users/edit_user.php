@@ -69,6 +69,7 @@ if (!isset($_SESSION['csrf_token'])) {
     $address = isset($_GET['address']) ? urldecode($_GET['address']) : $user['address'];
     $status = isset($_GET['status']) ? $_GET['status'] : $user['status'];
     $role_id = isset($_GET['role_id']) ? $_GET['role_id'] : $user['role_id'];
+    $position_id = isset($_GET['position_id']) ? $_GET['position_id'] : ($user['position_id'] ?? '');
 
     // Check if current user is editing their own account
     $is_editing_self = ($user_id == $_SESSION['user_id']);
@@ -81,6 +82,15 @@ if (!isset($_SESSION['csrf_token'])) {
     // Collect roles into an array
     while ($roleRow = $roleResult->fetch_assoc()) {
         $roles[] = $roleRow;
+    }
+
+    // Fetch available positions dynamically
+    $positions = [];
+    $positionQuery = "SELECT id, name FROM positions WHERE status = 'active'";
+    $positionResult = $conn->query($positionQuery);
+
+    while ($positionRow = $positionResult->fetch_assoc()) {
+        $positions[] = $positionRow;
     }
     ?>
 
@@ -237,6 +247,20 @@ if (!isset($_SESSION['csrf_token'])) {
                                             </select>
                                             <div class="error-feedback" id="role-error"></div>
                                         </div>
+
+                                        <!-- Position Field - Dynamically Populated -->
+                                        <div class="mb-3">
+                                            <label for="position_id" class="form-label">Position</label>
+                                            <select class="form-select" id="position_id" name="position_id" data-original="<?php echo htmlspecialchars($position_id); ?>">
+                                                <option value="">Select Position (Optional)...</option>
+                                                <?php foreach ($positions as $position): ?>
+                                                    <option value="<?= htmlspecialchars($position['id']) ?>" 
+                                                            <?php echo (!empty($position_id) && $position['id'] == $position_id) ? 'selected' : ''; ?>>
+                                                        <?= htmlspecialchars($position['name']) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -279,8 +303,16 @@ if (!isset($_SESSION['csrf_token'])) {
             minimumResultsForSearch: Infinity
         });
 
+        $('#position_id').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            minimumResultsForSearch: Infinity,
+            placeholder: 'Select Position (Optional)...',
+            allowClear: true
+        });
+
         // Trigger change detection for Select2-managed dropdowns
-        $('#status, #role_id').on('select2:select select2:unselect', function () {
+        $('#status, #role_id, #position_id').on('select2:select select2:unselect', function () {
             checkForChanges();
         });
     });
@@ -719,7 +751,7 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
     }
 
     // Check if any field has changed
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id'];
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -741,7 +773,7 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
 
 // Enable/disable submit button based on whether any field changed
 function checkForChanges() {
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id'];
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -758,7 +790,7 @@ function checkForChanges() {
 }
 
 // Attach listeners to all tracked fields
-['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'password'].forEach(function(id) {
+['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id', 'password'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
         el.addEventListener('input', checkForChanges);

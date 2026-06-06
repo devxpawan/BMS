@@ -64,6 +64,9 @@ try {
     $address = trim(filter_input(INPUT_POST, 'address', FILTER_SANITIZE_SPECIAL_CHARS));
     $status = filter_input(INPUT_POST, 'status', FILTER_SANITIZE_SPECIAL_CHARS);
     $role_id = filter_input(INPUT_POST, 'role_id', FILTER_VALIDATE_INT) ?: 0;
+    $position_id = filter_input(INPUT_POST, 'position_id', FILTER_VALIDATE_INT) ?: null;
+    // If position_id is 0 or empty, set to null for optional field
+    if (empty($position_id)) $position_id = null;
 
     // Input validation
     $errors = [];
@@ -115,23 +118,23 @@ try {
     // Begin database transaction
     $conn->begin_transaction();
 
-    // Prepare insert query
+    // Prepare insert query with position_id
     if (!empty($password)) {
         // Insert with password 
         $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, password, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssssssss", 
+        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("ssssssiss", 
             $name, $email, $mobile, $nic, $address, 
-            $status, $role_id, $hashed_password
+            $status, $role_id, $position_id, $hashed_password
         );
     } else {
         // Insert without password
-        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssssssi", 
+        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("ssssssii", 
             $name, $email, $mobile, $nic, $address, 
-            $status, $role_id
+            $status, $role_id, $position_id
         );
     }
 

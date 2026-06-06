@@ -159,31 +159,34 @@ if (!empty($search)) {
                             u.email LIKE '%$searchTerm%' OR
                             u.mobile LIKE '%$searchTerm%' OR
                             r.name LIKE '%$searchTerm%' OR
+                            p.name LIKE '%$searchTerm%' OR
                             u.status LIKE '%$searchTerm%')";
 }
 
-// Modify SQL based on user role and search
-if ($is_admin) {
-    // Admin can see all users
-    $sql = "SELECT u.*, r.name AS role_name 
-            FROM users u 
-            JOIN roles r ON u.role_id = r.id 
-            WHERE 1=1 $searchCondition
-            ORDER BY u.id DESC 
-            LIMIT $limit OFFSET $offset";
-    
-    $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE 1=1 $searchCondition";
-} else {
-    // Non-admin users can only see non-admin users
-    $sql = "SELECT u.*, r.name AS role_name 
-            FROM users u 
-            JOIN roles r ON u.role_id = r.id 
-            WHERE u.role_id != 1 $searchCondition
-            ORDER BY u.id DESC 
-            LIMIT $limit OFFSET $offset";
-            
-    $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE u.role_id != 1 $searchCondition";
-}
+    // Modify SQL based on user role and search
+    if ($is_admin) {
+        // Admin can see all users
+        $sql = "SELECT u.*, r.name AS role_name, p.name AS position_name 
+                FROM users u 
+                JOIN roles r ON u.role_id = r.id 
+                LEFT JOIN positions p ON u.position_id = p.id 
+                WHERE 1=1 $searchCondition
+                ORDER BY u.id DESC 
+                LIMIT $limit OFFSET $offset";
+        
+        $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE 1=1 $searchCondition";
+    } else {
+        // Non-admin users can only see non-admin users
+        $sql = "SELECT u.*, r.name AS role_name, p.name AS position_name 
+                FROM users u 
+                JOIN roles r ON u.role_id = r.id 
+                LEFT JOIN positions p ON u.position_id = p.id 
+                WHERE u.role_id != 1 $searchCondition
+                ORDER BY u.id DESC 
+                LIMIT $limit OFFSET $offset";
+                
+        $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE u.role_id != 1 $searchCondition";
+    }
 
 // Execute queries
 $countResult = $conn->query($countQuery);
@@ -268,9 +271,10 @@ $result = $conn->query($sql);
                                     <thead class="table-light">
                                         <tr>
                                             <th>User ID</th>
-                                            <th>Name</th>
+                                            <th>Name / Role</th>
                                             <th>Email</th>
                                             <th>Mobile</th>
+                                            <th>Position</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -289,6 +293,13 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td><?= htmlspecialchars($row['email']) ?></td>
                                                     <td><?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?></td>
+                                                    <td>
+                                                        <?php if (!empty($row['position_name'])): ?>
+                                                            <span class="badge badge-soft badge-soft-info"><?= htmlspecialchars($row['position_name']) ?></span>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">—</span>
+                                                        <?php endif; ?>
+                                                    </td>
                                                     <td>
                                                         <?php if ($row['status'] == 'active'): ?>
                                                             <span class="user-status-badge badge-soft badge-soft-success">Active</span>
@@ -313,6 +324,7 @@ $result = $conn->query($sql);
                                                                 data-user-status="<?= htmlspecialchars($row['status']) ?>"
                                                                 data-user-role="<?= htmlspecialchars($row['role_name']) ?>"
                                                                 data-user-role-id="<?= htmlspecialchars($row['role_id']) ?>"
+                                                                data-user-position="<?= isset($row['position_name']) ? htmlspecialchars($row['position_name']) : 'N/A' ?>"
                                                                 data-user-created="<?= htmlspecialchars($row['created_at']) ?>">
                                                                 <i class="fas fa-eye"></i>
                                                             </button>
