@@ -454,48 +454,33 @@ $result = $conn->query($sql);
 
     <!-- Modal for Marking Invoice as Paid -->
     <div class="modal fade" id="markPaidModal" tabindex="-1" aria-labelledby="markPaidModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header bg-light border-bottom-0 py-3">
-                    <h5 class="modal-title fw-bold" id="markPaidModalLabel">
-                        <i class="fas fa-money-bill-wave me-2 text-success"></i>Payment Sheet
-                    </h5>
+        <div class="modal-dialog modal-dialog-centered modal-system">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="markPaidModalLabel"><i class="fas fa-money-bill-wave me-2"></i>Payment Sheet</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form id="markPaidForm" enctype="multipart/form-data">
-                    <div class="modal-body p-4">
+                    <div class="modal-body">
                         <input type="hidden" name="invoice_id" id="invoice_id">
 
                         <div class="text-center mb-4">
-                            <div class="icon-box bg-primary-soft rounded-circle mx-auto mb-3" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; background-color: rgba(13, 110, 253, 0.1);">
-                                <i class="fas fa-file-invoice fa-2x text-primary"></i>
+                            <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10 mb-3" style="width: 64px; height: 64px;">
+                                <i class="fas fa-money-bill-wave fa-2x text-success"></i>
                             </div>
                             <h6 class="fw-bold mb-1">Confirm Payment</h6>
-                            <p class="text-muted small">Update the payment status for this invoice.</p>
+                            <p class="text-muted small">Upload the payment slip to mark this invoice as paid.</p>
                         </div>
 
-                        <div class="p-3 bg-light rounded-3 border mb-4">
-                            <label for="payment_slip" class="d-block mb-2">
-                                <small class="text-muted text-uppercase fw-semibold letter-spacing-1">Upload Payment Slip</small>
-                            </label>
+                        <div class="detail-card">
+                            <label for="payment_slip" class="detail-label mb-2"><i class="fas fa-upload"></i>Upload Payment Slip</label>
                             <input type="file" class="form-control" id="payment_slip" name="payment_slip" accept=".jpg,.jpeg,.png,.pdf">
-                            <div class="mt-2">
-                                <small class="text-muted d-block">
-                                    <i class="fas fa-info-circle me-1"></i> Supported: JPG, PNG, PDF (Max 2MB)
-                                </small>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-info border-0 rounded-3 small mb-0">
-                            <div class="d-flex">
-                                <i class="fas fa-info-circle mt-1 me-2"></i>
-                                <div>Please upload the payment slip to verify this transaction. This will mark the invoice as paid.</div>
-                            </div>
+                            <small class="form-text text-muted mt-2 d-block">Supported formats: JPG, PNG, PDF (Max 2MB)</small>
                         </div>
                     </div>
-                    <div class="modal-footer bg-light border-top-0 py-3">
-                        <button type="button" class="btn btn-link text-muted text-decoration-none fw-semibold" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success px-4 rounded-pill fw-bold">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
                             <i class="fas fa-check-circle me-1"></i>Mark as Paid
                         </button>
                     </div>

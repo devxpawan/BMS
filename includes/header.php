@@ -2,11 +2,12 @@
 
 $_company_favicon = '';
 $_company_logo    = '';
+$_company_name    = '';
 if (!isset($conn) && file_exists(__DIR__ . '/db_connection.php')) {
     @include_once __DIR__ . '/db_connection.php';
 }
 if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
-    $_cs = @$conn->query("SELECT logo_path, favicon_path FROM company_settings WHERE id = 1");
+    $_cs = @$conn->query("SELECT logo_path, favicon_path, company_name FROM company_settings WHERE id = 1");
     if ($_cs && $_row = $_cs->fetch_assoc()) {
         if (!empty($_row['favicon_path'])) {
             $_company_favicon = BASE_URL . $_row['favicon_path'];
@@ -14,6 +15,7 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
         if (!empty($_row['logo_path'])) {
             $_company_logo = BASE_URL . $_row['logo_path'];
         }
+        $_company_name = $_row['company_name'] ?? '';
     }
 }
 ?>

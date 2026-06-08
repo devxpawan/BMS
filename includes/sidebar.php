@@ -19,7 +19,7 @@
 
 /* ── Sidenav core ─────────────────────────────────────────── */
 #sidenavAccordion {
-    background: linear-gradient(180deg, #0f172a 0%, #0c1322 40%, #0a0f1e 100%);
+    background: #3F4D67;
     height: 100%;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     overflow: hidden;
@@ -65,6 +65,19 @@
     display: block;
     object-fit: contain;
     filter: brightness(1.1);
+}
+
+.sidebar-brand-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    line-height: 1.3;
+    max-height: 68px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 .sidebar-brand-badge {
@@ -459,15 +472,21 @@
             <a href="<?= BASE_URL ?>index.php" class="sidebar-brand-logo">
                 <?php
                 $_sb_logo = $_company_logo ?? '';
+                $_sb_company_name = '';
                 if (empty($_sb_logo) && isset($conn) && $conn instanceof mysqli) {
                     $_sb_info = getCompanyInfo($conn);
                     if (!empty($_sb_info['logo_path'])) {
                         $_sb_logo = BASE_URL . $_sb_info['logo_path'];
                     }
+                    $_sb_company_name = $_sb_info['company_name'] ?? '';
+                } else {
+                    $_sb_company_name = $_company_name ?? '';
                 }
                 ?>
                 <?php if (!empty($_sb_logo)): ?>
                     <img src="<?= htmlspecialchars($_sb_logo) ?>" alt="Logo">
+                <?php elseif (!empty($_sb_company_name)): ?>
+                    <span class="sidebar-brand-text"><?= htmlspecialchars($_sb_company_name) ?></span>
                 <?php endif; ?>
             </a>
         </div>

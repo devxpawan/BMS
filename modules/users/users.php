@@ -205,7 +205,7 @@ $result = $conn->query($sql);
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
     <title>All Users</title>
     <link href="<?= BASE_URL ?>css/users-list.css" rel="stylesheet" />
-
+    <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
 </head>
 
 <body class="sb-nav-fixed">
@@ -428,9 +428,9 @@ $result = $conn->query($sql);
 
     <!-- View User Modal -->
     <div class="modal fade" id="viewUserModal" tabindex="-1" aria-labelledby="viewUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-system">
             <div class="modal-content">
-                <div class="modal-header bg-light">
+                <div class="modal-header">
                     <h5 class="modal-title" id="viewUserModalLabel"><i class="fas fa-user-circle me-2"></i>User Details</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -438,7 +438,7 @@ $result = $conn->query($sql);
                     <!-- Dynamic content will be inserted here -->
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -472,52 +472,38 @@ $result = $conn->query($sql);
                 };
 
                 viewUserModalBody.innerHTML = `
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Name</span>
-                                <p class="detail-value">${userData.name}</p>
-                            </div>
+                    <div class="detail-grid">
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-user"></i>Name</span>
+                            <p class="detail-value">${userData.name}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Email</span>
-                                <p class="detail-value">${userData.email}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-envelope"></i>Email</span>
+                            <p class="detail-value">${userData.email}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Mobile</span>
-                                <p class="detail-value">${userData.mobile}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-phone"></i>Mobile</span>
+                            <p class="detail-value">${userData.mobile}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">NIC</span>
-                                <p class="detail-value">${userData.nic}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-id-card"></i>NIC</span>
+                            <p class="detail-value">${userData.nic}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Status</span>
-                                <p class="detail-value">
-                                    ${userData.status === 'active' 
-                                        ? '<span class="badge-soft badge-soft-success">Active</span>' 
-                                        : '<span class="badge-soft badge-soft-secondary">Inactive</span>'}
-                                </p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-flag"></i>Status</span>
+                            <p class="detail-value">
+                                ${userData.status === 'active' 
+                                    ? '<span class="badge-soft badge-soft-success">Active</span>' 
+                                    : '<span class="badge-soft badge-soft-secondary">Inactive</span>'}
+                            </p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Position</span>
-                                <p class="detail-value">${userData.position}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-briefcase"></i>Position</span>
+                            <p class="detail-value">${userData.position}</p>
                         </div>
-                        <div class="col-12">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Created At</span>
-                                <p class="detail-value">${userData.created}</p>
-                            </div>
+                        <div class="detail-card full-width">
+                            <span class="detail-label"><i class="fas fa-calendar"></i>Created At</span>
+                            <p class="detail-value">${userData.created}</p>
                         </div>
                     </div>
                 `;

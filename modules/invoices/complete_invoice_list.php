@@ -346,30 +346,37 @@ $result = $conn->query($sql);
 
     <!-- Modal for Marking Invoice as Paid -->
     <div class="modal fade" id="markPaidModal" tabindex="-1" aria-labelledby="markPaidModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-system">
             <div class="modal-content">
-                <div class="modal-header bg-light">
+                <div class="modal-header">
                     <h5 class="modal-title" id="markPaidModalLabel"><i class="fas fa-money-bill-wave me-2"></i>Payment Sheet</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <form id="markPaidForm" enctype="multipart/form-data">
+                <form id="markPaidForm" enctype="multipart/form-data">
+                    <div class="modal-body">
                         <input type="hidden" name="invoice_id" id="invoice_id">
 
-                        <div class="mb-3">
-                            <label for="payment_slip" class="form-label fw-semibold">Please Select Your Payment Slip</label>
-                            <input type="file" class="form-control" id="payment_slip" name="payment_slip"
-                                accept=".jpg,.png,.pdf">
-                            <small class="form-text text-muted">Supported File formats: .JPG / .PNG / .PDF (Optional)</small>
+                        <div class="text-center mb-4">
+                            <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10 mb-3" style="width: 64px; height: 64px;">
+                                <i class="fas fa-money-bill-wave fa-2x text-success"></i>
+                            </div>
+                            <h6 class="fw-bold mb-1">Confirm Payment</h6>
+                            <p class="text-muted small">Upload the payment slip to mark this invoice as paid.</p>
                         </div>
 
-                        <div class="text-center mt-4">
-                            <button type="submit" class="btn btn-success btn-lg px-5">
-                                <i class="fas fa-check-circle me-2"></i>Paid
-                            </button>
+                        <div class="detail-card">
+                            <label for="payment_slip" class="detail-label mb-2"><i class="fas fa-upload"></i>Upload Payment Slip</label>
+                            <input type="file" class="form-control" id="payment_slip" name="payment_slip" accept=".jpg,.jpeg,.png,.pdf">
+                            <small class="form-text text-muted mt-2 d-block">Supported formats: JPG, PNG, PDF (Optional)</small>
                         </div>
-                    </form>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check-circle me-1"></i>Mark as Paid
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

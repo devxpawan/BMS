@@ -77,6 +77,7 @@ $result = $conn->query($sql);
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
     <title>Customer List</title>
     <link href="<?= BASE_URL ?>css/customer-list.css" rel="stylesheet" />
+    <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
 </head>
 
 <body class="sb-nav-fixed">
@@ -284,7 +285,7 @@ $result = $conn->query($sql);
                 <div class="modal-body" id="viewCustomerModalBody">
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="font-weight:600;border-radius:8px;">Close</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -318,48 +319,42 @@ $result = $conn->query($sql);
                 };
 
                 viewCustomerModalBody.innerHTML = `
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Customer ID</span>
-                                <p class="detail-value">${customerData.id}</p>
-                            </div>
+                    <div class="detail-grid">
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-hashtag"></i>Customer ID</span>
+                            <p class="detail-value">${customerData.id}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Created At</span>
-                                <p class="detail-value">${customerData.created}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-calendar"></i>Created At</span>
+                            <p class="detail-value">${customerData.created}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Business Name</span>
-                                <p class="detail-value">${customerData.business || '<em class="text-muted">N/A</em>'}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-building"></i>Business Name</span>
+                            <p class="detail-value">${customerData.business || '<em class="text-muted">N/A</em>'}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Name</span>
-                                <p class="detail-value">${customerData.name}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-user"></i>Name</span>
+                            <p class="detail-value">${customerData.name}</p>
                         </div>
-                        <div class="col-md-12">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Email</span>
-                                <p class="detail-value">${customerData.email || '<em class="text-muted">N/A</em>'}</p>
-                            </div>
+                        <div class="detail-card full-width">
+                            <span class="detail-label"><i class="fas fa-envelope"></i>Email</span>
+                            <p class="detail-value">${customerData.email || '<em class="text-muted">N/A</em>'}</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Phone</span>
-                                <p class="detail-value">${customerData.phone}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-phone"></i>Phone</span>
+                            <p class="detail-value">${customerData.phone}</p>
                         </div>
-                        <div class="col-12">
-                            <div class="view-detail-box">
-                                <span class="detail-label">Address</span>
-                                <p class="detail-value">${customerData.address}</p>
-                            </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-flag"></i>Status</span>
+                            <p class="detail-value">
+                                ${customerData.status === 'Active'
+                                    ? '<span class="badge-soft badge-soft-success">Active</span>'
+                                    : '<span class="badge-soft badge-soft-secondary">Inactive</span>'}
+                            </p>
+                        </div>
+                        <div class="detail-card full-width">
+                            <span class="detail-label"><i class="fas fa-location-dot"></i>Address</span>
+                            <p class="detail-value">${customerData.address}</p>
                         </div>
                     </div>
                 `;

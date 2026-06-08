@@ -108,13 +108,10 @@ $conn->close();
 
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f4e 40%, #0d2137 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
         }
 
         #flare-canvas {
@@ -127,60 +124,50 @@ $conn->close();
             pointer-events: none;
         }
 
-        .signin-container {
+        .split-layout {
             display: flex;
-            width: 960px;
-            max-width: 100%;
-            background-color: #fff;
-            border-radius: 16px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-            animation: fadeInUp 0.6s ease-out;
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+            width: 100%;
+            min-height: 100vh;
         }
 
         /* LEFT PANEL */
-        .signin-left {
+        .split-left {
             flex: 1;
-            background: linear-gradient(160deg, #0b1a3d 0%, #162d6b 50%, #1a3a8f 100%);
+            background: #3F4D67;
             color: #fff;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            padding: 50px 40px;
+            padding: 60px 40px;
             text-align: center;
             position: relative;
             overflow: hidden;
         }
 
-        .signin-left::before {
+        .split-left::before {
             content: '';
             position: absolute;
             top: -60px;
             right: -60px;
-            width: 200px;
-            height: 200px;
+            width: 300px;
+            height: 300px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.04);
         }
 
-        .signin-left::after {
+        .split-left::after {
             content: '';
             position: absolute;
-            bottom: -40px;
-            left: -40px;
-            width: 150px;
-            height: 150px;
+            bottom: -80px;
+            left: -80px;
+            width: 250px;
+            height: 250px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.03);
         }
 
-        .signin-left .deco-dots {
+        .split-left .deco-dots {
             position: absolute;
             top: 30px;
             left: 30px;
@@ -189,14 +176,14 @@ $conn->close();
             gap: 10px;
         }
 
-        .signin-left .deco-dots span {
+        .split-left .deco-dots span {
             width: 6px;
             height: 6px;
             background: rgba(255,255,255,0.15);
             border-radius: 50%;
         }
 
-        .signin-left .deco-line {
+        .split-left .deco-line {
             position: absolute;
             bottom: 40px;
             right: 40px;
@@ -207,60 +194,63 @@ $conn->close();
         }
 
         .hero-image {
-            width: 180px;
+            width: 260px;
             height: auto;
             margin-bottom: 28px;
-            border-radius: 12px;
-            filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3));
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .hero-image {
-            width: 280px;
-            height: auto;
-            margin-bottom: 28px;
-            border-radius: 12px;
             filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3));
         }
 
-        .signin-left h2 {
-            font-size: 28px;
+        .split-left h1 {
+            font-size: 32px;
             font-weight: 700;
-            margin: 0;
+            margin: 0 0 10px;
             letter-spacing: -0.5px;
         }
 
-        .signin-left p {
+        .split-left p {
             font-size: 15px;
-            margin-top: 10px;
             color: rgba(255,255,255,0.7);
             font-weight: 300;
-            line-height: 1.5;
+            line-height: 1.6;
+            max-width: 360px;
+        }
+
+        .split-left .brand-footer {
+            position: absolute;
+            bottom: 30px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.35);
+            letter-spacing: 1px;
         }
 
         /* RIGHT PANEL */
-        .signin-right {
+        .split-right {
             flex: 1;
-            padding: 50px 45px;
+            background: #fff;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            padding: 60px 50px;
         }
 
-        .signin-right h2 {
+        .form-container {
+            max-width: 400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .split-right h2 {
             font-size: 26px;
-            text-align: left;
             margin: 0 0 6px 0;
             color: #1a1a2e;
             font-weight: 700;
             letter-spacing: -0.5px;
         }
 
-        .signin-right .subtitle {
+        .split-right .subtitle {
             font-size: 14px;
             color: #888;
-            margin-bottom: 28px;
-            text-align: left;
+            margin-bottom: 32px;
         }
 
         .input-group {
@@ -273,8 +263,6 @@ $conn->close();
             color: #444;
             margin-bottom: 6px;
             display: block;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .input-icon-wrapper {
@@ -315,7 +303,6 @@ $conn->close();
             color: #3b5bdb;
         }
 
-        /* Password */
         .password-container {
             position: relative;
             display: flex;
@@ -349,17 +336,6 @@ $conn->close();
             padding-right: 46px;
         }
 
-        .input-group label a {
-            font-size: 13px;
-            color: #3b5bdb;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .input-group label a:hover {
-            text-decoration: underline;
-        }
-
         .input-group.remember-me {
             display: flex;
             align-items: center;
@@ -386,14 +362,7 @@ $conn->close();
             cursor: pointer;
         }
 
-        .input-group.remember-me a {
-            font-size: 13px;
-            color: #3b5bdb;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .signin-right button {
+        .split-right button {
             width: 100%;
             padding: 14px;
             font-size: 15px;
@@ -409,24 +378,24 @@ $conn->close();
             box-shadow: 0 4px 15px rgba(59, 91, 219, 0.3);
         }
 
-        .signin-right button:hover {
+        .split-right button:hover {
             background: linear-gradient(135deg, #364fc7, #4c6ef5);
             box-shadow: 0 6px 20px rgba(59, 91, 219, 0.4);
             transform: translateY(-1px);
         }
 
-        .signin-right button:active {
+        .split-right button:active {
             transform: translateY(0);
         }
 
-        .signin-right p {
+        .split-right .signup-link {
             text-align: center;
             margin-top: 22px;
             font-size: 14px;
             color: #888;
         }
 
-        .signin-right p a {
+        .split-right .signup-link a {
             color: #3b5bdb;
             text-decoration: none;
             font-weight: 600;
@@ -452,14 +421,19 @@ $conn->close();
         }
 
         @media (max-width: 768px) {
-            .signin-container {
+            .split-layout {
                 flex-direction: column;
             }
-            .signin-left {
-                padding: 35px 25px;
+            .split-left {
+                padding: 50px 30px;
+                min-height: 40vh;
             }
-            .signin-right {
-                padding: 35px 25px;
+            .split-right {
+                padding: 40px 30px;
+                min-height: 60vh;
+            }
+            .hero-image {
+                width: 180px;
             }
         }
     </style>
@@ -468,8 +442,8 @@ $conn->close();
 
 <body>
     <canvas id="flare-canvas"></canvas>
-    <div class="signin-container">
-        <div class="signin-left">
+    <div class="split-layout">
+        <div class="split-left">
             <div class="deco-dots">
                 <span></span><span></span><span></span><span></span>
                 <span></span><span></span><span></span><span></span>
@@ -480,46 +454,50 @@ $conn->close();
             <?php if (!empty($signin_logo)): ?>
             <img src="<?= htmlspecialchars($signin_logo) ?>" alt="Logo" class="hero-image">
             <?php endif; ?>
-            <p>Sign in to access your dashboard<br>and manage account.</p>
+            <h1>Welcome Back</h1>
+            <p>Sign in to access your dashboard and manage your business.</p>
+            <div class="brand-footer">© <?= date('Y') ?> BMS</div>
         </div>
-        <div class="signin-right">
-            <h2>Sign In</h2>
-            <p class="subtitle">Enter your credentials to continue</p>
-            <?php if (!empty($error_message)): ?>
-                <div class="error-message">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <?php echo $error_message; ?>
-                </div>
-            <?php endif; ?>
-            <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST">
-                <div class="input-group">
-                    <label for="email">Email</label>
-                    <div class="input-icon-wrapper">
-                        <i class="fas fa-envelope"></i>
-                        <input type="email" id="email" name="email"
-                            value="<?php echo isset($_COOKIE['email']) ? $_COOKIE['email'] : ''; ?>" placeholder="you@example.com" required>
+        <div class="split-right">
+            <div class="form-container">
+                <h2>Sign In</h2>
+                <p class="subtitle">Enter your credentials to continue</p>
+                <?php if (!empty($error_message)): ?>
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <?php echo $error_message; ?>
                     </div>
-                </div>
-                <div class="input-group">
-                    <label for="password">Password</label>
-                    <div class="password-container">
+                <?php endif; ?>
+                <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST">
+                    <div class="input-group">
+                        <label for="email">Email</label>
                         <div class="input-icon-wrapper">
-                            <i class="fas fa-lock"></i>
-                            <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="email" name="email"
+                                value="<?php echo isset($_COOKIE['email']) ? $_COOKIE['email'] : ''; ?>" placeholder="you@example.com" required>
                         </div>
-                        <span class="password-toggle" id="togglePassword">
-                            <i class="fas fa-eye"></i>
-                        </span>
                     </div>
-                </div>
-                <div class="input-group remember-me">
-                    <label>
-                        <input type="checkbox" name="remember" <?php echo isset($_COOKIE['email']) ? 'checked' : ''; ?>>
-                        Remember me
-                    </label>
-                </div>
-                <button type="submit">Sign In</button>
-            </form>
+                    <div class="input-group">
+                        <label for="password">Password</label>
+                        <div class="password-container">
+                            <div class="input-icon-wrapper">
+                                <i class="fas fa-lock"></i>
+                                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                            </div>
+                            <span class="password-toggle" id="togglePassword">
+                                <i class="fas fa-eye"></i>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="input-group remember-me">
+                        <label>
+                            <input type="checkbox" name="remember" <?php echo isset($_COOKIE['email']) ? 'checked' : ''; ?>>
+                            Remember me
+                        </label>
+                    </div>
+                    <button type="submit">Sign In</button>
+                </form>
+            </div>
         </div>
     </div>
 

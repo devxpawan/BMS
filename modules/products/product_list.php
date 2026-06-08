@@ -125,6 +125,7 @@ $result = $conn->query($sql);
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
     <title>Product List</title>
     <link href="<?= BASE_URL ?>css/product-list.css" rel="stylesheet" />
+    <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
 </head>
 
 <body class="sb-nav-fixed">
@@ -283,65 +284,53 @@ $result = $conn->query($sql);
 
                                                 <!-- View Modal -->
                                                 <div class="modal fade" id="viewModal<?= $row['id'] ?>" tabindex="-1" aria-labelledby="viewModalLabel" aria-hidden="true">
-                                                    <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-dialog modal-dialog-centered modal-system">
                                                         <div class="modal-content">
-                                                            <div class="modal-header bg-light">
+                                                            <div class="modal-header">
                                                                 <h5 class="modal-title" id="viewModalLabel"><i class="fas fa-box me-2"></i>Product Details</h5>
                                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                             </div>
                                                             <div class="modal-body">
-                                                                <div class="row g-3">
-                                                                    <div class="col-md-6">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">ID</span>
-                                                                            <p class="detail-value"><?= htmlspecialchars($row['id']) ?></p>
-                                                                        </div>
+                                                                <div class="detail-grid">
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-hashtag"></i>ID</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['id']) ?></p>
                                                                     </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">Name</span>
-                                                                            <p class="detail-value"><?= htmlspecialchars($row['name']) ?></p>
-                                                                        </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-tag"></i>Name</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['name']) ?></p>
                                                                     </div>
-                                                                    <div class="col-12">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">Description</span>
-                                                                            <p class="detail-value"><?= htmlspecialchars($row['description']) ?></p>
-                                                                        </div>
+                                                                    <div class="detail-card full-width">
+                                                                        <span class="detail-label"><i class="fas fa-align-left"></i>Description</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['description']) ?></p>
                                                                     </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">Price (LKR)</span>
-                                                                            <p class="detail-value">
-                                                                                <?php
-                                                                                if (isset($row['lkr_price'])) {
-                                                                                    echo number_format($row['lkr_price'], 2) . ' LKR';
-                                                                                } elseif (isset($row['price']) && isset($row['currency']) && $row['currency'] == 'LKR') {
-                                                                                    echo number_format($row['price'], 2) . ' LKR';
-                                                                                } else {
-                                                                                    echo '<em class="text-muted">N/A</em>';
-                                                                                }
-                                                                                ?>
-                                                                            </p>
-                                                                        </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-money-bill"></i>Price (LKR)</span>
+                                                                        <p class="detail-value">
+                                                                            <?php
+                                                                            if (isset($row['lkr_price'])) {
+                                                                                echo number_format($row['lkr_price'], 2) . ' LKR';
+                                                                            } elseif (isset($row['price']) && isset($row['currency']) && $row['currency'] == 'LKR') {
+                                                                                echo number_format($row['price'], 2) . ' LKR';
+                                                                            } else {
+                                                                                echo '<em class="text-muted">N/A</em>';
+                                                                            }
+                                                                            ?>
+                                                                        </p>
                                                                     </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">Created At</span>
-                                                                            <p class="detail-value"><?= htmlspecialchars($row['created_at']) ?></p>
-                                                                        </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-calendar"></i>Created At</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['created_at']) ?></p>
                                                                     </div>
-                                                                    <div class="col-md-6">
-                                                                        <div class="view-detail-box">
-                                                                            <span class="detail-label">Status</span>
-                                                                            <p class="detail-value">
-                                                                                <?php if ($status == 'active'): ?>
-                                                                                    <span class="badge-soft badge-soft-success">Active</span>
-                                                                                <?php else: ?>
-                                                                                    <span class="badge-soft badge-soft-secondary">Inactive</span>
-                                                                                <?php endif; ?>
-                                                                            </p>
-                                                                        </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-flag"></i>Status</span>
+                                                                        <p class="detail-value">
+                                                                            <?php if ($status == 'active'): ?>
+                                                                                <span class="badge-soft badge-soft-success">Active</span>
+                                                                            <?php else: ?>
+                                                                                <span class="badge-soft badge-soft-secondary">Inactive</span>
+                                                                            <?php endif; ?>
+                                                                        </p>
                                                                     </div>
                                                                 </div>
                                                             </div>
