@@ -44,6 +44,15 @@ window.addEventListener('DOMContentLoaded', event => {
         });
     }
 
+    // Close sidebar when a nav link is clicked on mobile
+    document.querySelectorAll('.sb-sidenav-menu .nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+            if (isMobile() && link.getAttribute('href') && link.getAttribute('href') !== '#' && link.getAttribute('href') !== 'javascript:void(0);') {
+                body.classList.remove('sb-sidenav-toggled');
+            }
+        });
+    });
+
     // Handle resize: cleanup mobile state when switching to desktop
     let prevMobile = isMobile();
     window.addEventListener('resize', () => {
@@ -70,4 +79,9 @@ window.addEventListener('DOMContentLoaded', event => {
             });
         }
     });
+
+    // Prevent CSS hover states from sticking on mobile after tap
+    document.addEventListener('touchstart', () => {
+        document.body.classList.add('touch-device');
+    }, { passive: true });
 });

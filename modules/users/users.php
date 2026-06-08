@@ -271,7 +271,7 @@ $result = $conn->query($sql);
                                     <thead class="table-light">
                                         <tr>
                                             <th>User ID</th>
-                                            <th>Name / Role</th>
+                                            <th>Name</th>
                                             <th>Email</th>
                                             <th>Mobile</th>
                                             <th>Position</th>

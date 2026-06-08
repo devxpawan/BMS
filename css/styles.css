@@ -6802,12 +6802,19 @@ textarea.form-control-lg {
   --bs-aspect-ratio: 42.8571428571%;
 }
 
-.fixed-top, .sb-nav-fixed #layoutSidenav #layoutSidenav_nav, .sb-nav-fixed .sb-topnav {
+.fixed-top, .sb-nav-fixed .sb-topnav {
   position: fixed;
   top: 0;
   right: 0;
   left: 0;
   z-index: 1030;
+}
+
+.sb-nav-fixed #layoutSidenav #layoutSidenav_nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1050;
 }
 
 .fixed-bottom {
@@ -10917,7 +10924,7 @@ body {
 }
 
 #layoutSidenav_content > main > .container-fluid {
-  padding: 28px 32px;
+  padding: 0px 32px;
 }
 
 @media (max-width: 767.98px) {

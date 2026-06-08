@@ -5,14 +5,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Layout container ─────────────────────────────────────── */
-#layoutSidenav_nav {
+#layoutSidenav #layoutSidenav_nav {
     width: 260px;
     flex-shrink: 0;
     position: fixed;
     top: 0;
     left: 0;
+    right: auto;
     height: 100vh;
-    z-index: 1040;
+    z-index: 1050;
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
                 width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -427,10 +428,10 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(15, 23, 42, 0.5);
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
-        z-index: 1039;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        z-index: 1045;
         opacity: 0;
         visibility: hidden;
         transition: opacity 0.35s ease, visibility 0.35s ease;
@@ -440,6 +441,11 @@
     body.sb-sidenav-toggled .sidebar-overlay {
         opacity: 1;
         visibility: visible;
+    }
+
+    /* Lock body scroll when mobile sidebar is open */
+    body.sb-sidenav-toggled {
+        overflow: hidden;
     }
 }
 

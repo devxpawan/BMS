@@ -311,9 +311,25 @@ body {
 }
 
 @media (max-width: 576px) {
+    .dash-header h4 { font-size: 20px; }
     .stat-card .stat-value { font-size: 22px; }
-    .dash-action-btn { padding: 8px 14px; font-size: 12px; }
+    .dash-action-btn { padding: 8px 14px; font-size: 12px; white-space: nowrap; }
     .dash-card .dash-card-body { padding: 12px 14px; }
+    .dash-card .dash-card-title { font-size: 14px; padding-bottom: 8px; }
     .dash-table thead th,
     .dash-table tbody td { padding: 6px 10px; font-size: 11px; }
+    .stat-card .stat-icon { width: 36px; height: 36px; font-size: 15px; }
+    .stat-card .stat-link { font-size: 11px; padding: 4px 10px; }
+}
+
+@media (max-width: 400px) {
+    .dash-stats .row {
+        margin: 0 -4px;
+    }
+    .dash-stats .row > [class*="col-"] {
+        padding: 0 4px;
+    }
+    .stat-card { padding: 12px 14px; }
+    .stat-card .stat-value { font-size: 20px; }
+    .dash-card .dash-card-body { padding: 10px 12px; }
 }
