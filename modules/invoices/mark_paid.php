@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Process the uploaded file
         $file = $_FILES['payment_slip'];
         $filename = 'payment_slip_' . $invoice_id . '_' . time() . '.' . pathinfo($file['name'], PATHINFO_EXTENSION);
-        $uploadDir = 'uploads/payments/';
+        $uploadDir = BASE_PATH . 'uploads/payments/';
         
         // Create directory if it doesn't exist
         if (!is_dir($uploadDir)) {

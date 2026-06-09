@@ -215,6 +215,16 @@
     box-shadow: 0 2px 6px rgba(7, 148, 85, 0.2);
 }
 
+.action-btn-group .btn-receipt { color: #8B5CF6; }
+
+.action-btn-group .btn-receipt:hover {
+    background: #f5f3ff;
+    border-color: #8B5CF6;
+    color: #7C3AED;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.2);
+}
+
 .action-btn-group .btn-process { color: #3B82F6; }
 
 .action-btn-group .btn-process:hover {

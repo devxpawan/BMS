@@ -289,13 +289,21 @@ if ($pu) {
                                                                 data-paystatus="<?php echo $payStatus; ?>">
                                                                 <i class="fas fa-eye"></i>
                                                             </a>
-                                                            <a href="<?= BASE_URL ?>modules/invoices/download_invoice.php?id=<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
+                                                         <a href="<?= BASE_URL ?>modules/invoices/download_invoice.php?id=<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
                                                                 class="btn btn-download"
                                                                 title="Download Invoice"
                                                                 target="_blank">
                                                                 <i class="fas fa-download"></i>
-                                                            </a>
-                                                        </div>
+                                                             </a>
+                                                             <?php if (!empty($row['slip'])): ?>
+                                                             <a href="#" class="btn btn-receipt view-receipt"
+                                                                title="View Receipt"
+                                                                data-slip="<?php echo htmlspecialchars($row['slip']); ?>"
+                                                                data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>">
+                                                                <i class="fas fa-receipt"></i>
+                                                             </a>
+                                                             <?php endif; ?>
+                                                         </div>
                                                     </td>
                                                 </tr>
                                             <?php endwhile; ?>
@@ -380,6 +388,43 @@ if ($pu) {
         </div>
     </div>
 
+    <!-- Modal for Viewing Receipt -->
+    <div class="modal fade" id="viewReceiptModal" tabindex="-1" aria-labelledby="viewReceiptModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-system">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewReceiptModalLabel"><i class="fas fa-receipt"></i> Payment Receipt</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center" id="receiptContent">
+                    <div id="receiptLoading" class="py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading receipt...</p>
+                    </div>
+                    <div id="receiptDisplay" class="d-none">
+                        <img id="receiptImage" src="" alt="Payment Receipt" class="img-fluid rounded border" style="max-height: 500px; object-fit: contain;">
+                        <div id="receiptPdfContainer" class="d-none">
+                            <iframe id="receiptPdf" src="" style="width:100%;height:500px;border:none;" allowfullscreen></iframe>
+                        </div>
+                    </div>
+                    <div id="receiptNotFound" class="d-none py-5">
+                        <i class="fas fa-file-excel fa-4x text-muted mb-3"></i>
+                        <p class="text-muted">Receipt file not found.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a id="receiptDownloadLink" href="#" class="btn btn-primary" target="_blank">
+                        <i class="fas fa-download me-1"></i>Download Receipt
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -433,6 +478,72 @@ if ($pu) {
 
                 // Show the modal
                 $('#markPaidModal').modal('show');
+            });
+
+            // Handle "View Receipt" button click
+            $(document).on('click', '.view-receipt', function (e) {
+                e.preventDefault();
+
+                var slipName = $(this).data('slip');
+                var invoiceId = $(this).data('id');
+
+                // Reset modal content
+                $('#receiptLoading').removeClass('d-none');
+                $('#receiptDisplay').addClass('d-none');
+                $('#receiptNotFound').addClass('d-none');
+                $('#receiptDownloadLink').attr('href', '#');
+
+                // Build the receipt URL from root uploads folder
+                var receiptUrl = '<?= BASE_URL ?>uploads/payments/' + encodeURIComponent(slipName);
+
+                // Check if the file exists by trying to load it
+                var ext = slipName.split('.').pop().toLowerCase();
+                if (ext === 'pdf') {
+                    // For PDF - try to load in iframe
+                    $('#receiptImage').addClass('d-none');
+                    $('#receiptPdfContainer').removeClass('d-none');
+                    $('#receiptPdf').attr('src', receiptUrl);
+                    $('#receiptPdf').on('load', function () {
+                        $('#receiptLoading').addClass('d-none');
+                        $('#receiptDisplay').removeClass('d-none');
+                    });
+                    $('#receiptPdf').on('error', function () {
+                        $('#receiptLoading').addClass('d-none');
+                        $('#receiptNotFound').removeClass('d-none');
+                    });
+                } else {
+                    // For images - preload to check if exists
+                    var img = new Image();
+                    img.onload = function () {
+                        $('#receiptPdfContainer').addClass('d-none');
+                        $('#receiptImage').removeClass('d-none');
+                        $('#receiptImage').attr('src', receiptUrl);
+                        $('#receiptLoading').addClass('d-none');
+                        $('#receiptDisplay').removeClass('d-none');
+                    };
+                    img.onerror = function () {
+                        $('#receiptLoading').addClass('d-none');
+                        $('#receiptNotFound').removeClass('d-none');
+                    };
+                    img.src = receiptUrl;
+                }
+
+                // Set download link
+                $('#receiptDownloadLink').attr('href', receiptUrl);
+
+                // Show the modal
+                $('#viewReceiptModal').modal('show');
+            });
+
+            // Reset receipt modal content when hidden
+            $('#viewReceiptModal').on('hidden.bs.modal', function () {
+                $('#receiptLoading').addClass('d-none');
+                $('#receiptDisplay').addClass('d-none');
+                $('#receiptNotFound').addClass('d-none');
+                $('#receiptImage').attr('src', '');
+                $('#receiptPdf').attr('src', '');
+                $('#receiptPdfContainer').addClass('d-none');
+                $('#receiptImage').removeClass('d-none');
             });
 
             // Handle form submission
