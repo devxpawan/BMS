@@ -19,18 +19,17 @@ $error_message = "";
 // Check if form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Sanitize inputs
-    $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
+    $login = trim($_POST['email']);
     $password = $_POST['password'];
     $remember = isset($_POST['remember']); // Check if "Remember Me" is checked
 
-    // Validate email
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = "Invalid email format";
+    if (empty($login)) {
+        $error_message = "Please enter your email or username.";
     } else {
-        // Query to check if user exists with the given email
-        $sql = "SELECT * FROM users WHERE email = ?";
+        // Query to check if user exists with the given email OR username
+        $sql = "SELECT * FROM users WHERE email = ? OR username = ?";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("s", $email);
+        $stmt->bind_param("ss", $login, $login);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -45,15 +44,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // Verify the hashed password
                 if (password_verify($password, $user['password']) || $password == $user['password']) { // Second condition for testing only, remove in production
                     // Password is correct, start session
-                    $_SESSION['user'] = $email;
+                    $_SESSION['user'] = $user['email'];
                     $_SESSION['user_id'] = $user['id']; // Storing user ID in session
                     $_SESSION['role_id'] = $user['role_id']; // Storing role ID
                     $_SESSION['name'] = $user['name']; // Storing user name
+                    $_SESSION['username'] = $user['username'];
                     $_SESSION['logged_in'] = true;
 
                     // Handle "Remember Me" by setting cookies
                     if ($remember) {
-                        setcookie("email", $email, time() + (86400 * 30), "/"); // 30 days
+                        setcookie("email", $user['email'], time() + (86400 * 30), "/"); // 30 days
                     } else {
                         // Clear cookie if "Remember Me" is unchecked
                         setcookie("email", "", time() - 3600, "/");
@@ -79,7 +79,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
             }
         } else {
-            $error_message = "No user found with that email.";
+            $error_message = "No user found with that email or username.";
         }
 
         $stmt->close();
@@ -470,11 +470,11 @@ $conn->close();
                 <?php endif; ?>
                 <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST">
                     <div class="input-group">
-                        <label for="email">Email</label>
+                        <label for="email">Email or Username</label>
                         <div class="input-icon-wrapper">
                             <i class="fas fa-envelope"></i>
-                            <input type="email" id="email" name="email"
-                                value="<?php echo isset($_COOKIE['email']) ? $_COOKIE['email'] : ''; ?>" placeholder="you@example.com" required>
+                            <input type="text" id="email" name="email"
+                                value="<?php echo isset($_COOKIE['email']) ? $_COOKIE['email'] : ''; ?>" placeholder="email@example.com or username" required>
                         </div>
                     </div>
                     <div class="input-group">

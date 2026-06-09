@@ -40,7 +40,7 @@ if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['c
 }
 
 // Basic validation of required fields
-$required_fields = ['name', 'email', 'role_id', 'user_id'];
+$required_fields = ['name', 'username', 'email', 'role_id', 'user_id'];
 foreach ($required_fields as $field) {
     if (!isset($_POST[$field]) || empty(trim($_POST[$field]))) {
         $_SESSION['error_message'] = ucfirst($field) . " is required.";
@@ -52,6 +52,7 @@ foreach ($required_fields as $field) {
 // Sanitize and validate inputs
 $user_id = intval($_POST['user_id']);
 $name = trim($_POST['name']);
+$username = trim($_POST['username']);
 $email = filter_var(trim($_POST['email']), FILTER_SANITIZE_EMAIL);
 $role_id = intval($_POST['role_id']);
 $mobile = isset($_POST['mobile']) ? trim($_POST['mobile']) : '';
@@ -63,6 +64,18 @@ $position_id = isset($_POST['position_id']) && !empty($_POST['position_id']) ? i
 // Validate email format
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $_SESSION['error_message'] = "Invalid email format.";
+    header("Location: " . BASE_URL . "modules/users/users.php");
+    exit();
+}
+
+// Validate username format
+if (empty($username)) {
+    $_SESSION['error_message'] = "Username is required.";
+    header("Location: " . BASE_URL . "modules/users/users.php");
+    exit();
+}
+if (!preg_match('/^[a-zA-Z0-9_]{3,50}$/', $username)) {
+    $_SESSION['error_message'] = "Username must be 3-50 characters and can only contain letters, numbers, and underscores.";
     header("Location: " . BASE_URL . "modules/users/users.php");
     exit();
 }
@@ -81,6 +94,21 @@ if ($email_result->num_rows > 0) {
     exit();
 }
 $email_stmt->close();
+
+// Check for duplicate username (excluding current user when editing)
+$username_check_sql = "SELECT id FROM users WHERE username = ? AND id != ?";
+$username_stmt = $conn->prepare($username_check_sql);
+$username_stmt->bind_param("si", $username, $user_id);
+$username_stmt->execute();
+$username_result = $username_stmt->get_result();
+
+if ($username_result->num_rows > 0) {
+    $_SESSION['error_message'] = "Username is already in use by another user.";
+    header("Location: " . BASE_URL . "modules/users/users.php");
+    $username_stmt->close();
+    exit();
+}
+$username_stmt->close();
 
     // Check if role exists
 $role_check_stmt = $conn->prepare("SELECT id FROM roles WHERE id = ?");
@@ -112,7 +140,7 @@ try {
     
     // Fetch the original user data to track changes
     $original_user_stmt = $conn->prepare("
-        SELECT name, email, status, role_id, mobile, nic, address, position_id
+        SELECT name, username, email, status, role_id, mobile, nic, address, position_id
         FROM users WHERE id = ?
     ");
     $original_user_stmt->bind_param("i", $user_id);
@@ -125,6 +153,9 @@ try {
     $changes = [];
     if ($original_user['name'] !== $name) {
         $changes[] = "Name changed from '{$original_user['name']}' to '{$name}'";
+    }
+    if ($original_user['username'] !== $username) {
+        $changes[] = "Username changed from '{$original_user['username']}' to '{$username}'";
     }
     if ($original_user['email'] !== $email) {
         $changes[] = "Email changed from '{$original_user['email']}' to '{$email}'";
@@ -176,24 +207,24 @@ try {
         // Hash the password if it's being updated
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         
-        // Update with new password and position_id
+        // Update with new password, username, and position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, password = ?, role_id = ?, position_id = ?,
+            SET name = ?, username = ?, email = ?, password = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("sssiisssi", $name, $email, $hashed_password, $role_id, 
+        $update_stmt->bind_param("ssssiisssi", $name, $username, $email, $hashed_password, $role_id, 
                                 $position_id, $mobile, $nic, $address, $user_id);
     } else {
-        // Update without changing password, but with position_id
+        // Update without changing password, but with username and position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, role_id = ?, position_id = ?,
+            SET name = ?, username = ?, email = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("ssiisssi", $name, $email, $role_id, $position_id, 
+        $update_stmt->bind_param("sssiisssi", $name, $username, $email, $role_id, $position_id, 
                                 $mobile, $nic, $address, $user_id);
     }
     

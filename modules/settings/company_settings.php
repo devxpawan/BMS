@@ -211,7 +211,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 
 <head>
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
-    <title>Company Settings - SmartInvoice</title>
+    <title>Company Settings - BMS</title>
     <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
     <!-- Select2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -481,28 +481,28 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                         <div class="col-md-6 mb-3">
                                             <label for="bank_name" class="form-label">Bank Name</label>
                                             <input type="text" class="form-control" id="bank_name" name="bank_name"
-                                                value="<?= htmlspecialchars($settings['bank_name'] ?? '') ?>" placeholder="e.g. Bank of Ceylon">
+                                                value="<?= htmlspecialchars($settings['bank_name'] ?? '') ?>" placeholder="Bank Name">
                                         </div>
 
                                         <!-- Bank Branch -->
                                         <div class="col-md-6 mb-3">
                                             <label for="bank_branch" class="form-label">Bank Branch</label>
                                             <input type="text" class="form-control" id="bank_branch" name="bank_branch"
-                                                value="<?= htmlspecialchars($settings['bank_branch'] ?? '') ?>" placeholder="e.g. Pitakotte">
+                                                value="<?= htmlspecialchars($settings['bank_branch'] ?? '') ?>" placeholder="Bank Branch">
                                         </div>
 
                                         <!-- Account Holder Name -->
                                         <div class="col-md-6 mb-3">
                                             <label for="account_name" class="form-label">Account Holder Name</label>
                                             <input type="text" class="form-control" id="account_name" name="account_name"
-                                                value="<?= htmlspecialchars($settings['account_name'] ?? '') ?>" placeholder="e.g. FE IT Solutions (Pvt) Ltd">
+                                                value="<?= htmlspecialchars($settings['account_name'] ?? '') ?>" placeholder="Your Company Account Name">
                                         </div>
 
                                         <!-- Account Number -->
                                         <div class="col-md-6 mb-3">
                                             <label for="account_number" class="form-label">Account Number</label>
                                             <input type="text" class="form-control" id="account_number" name="account_number"
-                                                value="<?= htmlspecialchars($settings['account_number'] ?? '') ?>" placeholder="e.g. 8956321452">
+                                                value="<?= htmlspecialchars($settings['account_number'] ?? '') ?>" placeholder="Your Company Account Number">
                                         </div>
 
                                         <!-- Account Type -->

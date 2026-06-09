@@ -311,6 +311,7 @@ $result = $conn->query($sql);
                                         <tr>
                                             <th>User ID</th>
                                             <th>Name</th>
+                                            <th>Username</th>
                                             <th>Email</th>
                                             <th>Mobile</th>
                                             <th>Position</th>
@@ -330,6 +331,7 @@ $result = $conn->query($sql);
                                                         <div class="user-name"><?= htmlspecialchars($row['name']) ?></div>
                                                         <div class="user-role"><?= htmlspecialchars($row['role_name']) ?></div>
                                                     </td>
+                                                    <td><?= htmlspecialchars($row['username']) ?></td>
                                                     <td><?= htmlspecialchars($row['email']) ?></td>
                                                     <td><?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?></td>
                                                     <td>
@@ -348,7 +350,7 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td>
                                                         <div class="action-btn-group d-flex gap-1">
-                                                            <a href="<?= BASE_URL ?>modules/users/edit_user.php?id=<?= htmlspecialchars($row['id']) ?>&name=<?= urlencode($row['name']) ?>&email=<?= urlencode($row['email']) ?>&status=<?= htmlspecialchars($row['status']) ?>&role=<?= urlencode($row['role_name']) ?>"
+                                                            <a href="<?= BASE_URL ?>modules/users/edit_user.php?id=<?= htmlspecialchars($row['id']) ?>&name=<?= urlencode($row['name']) ?>&username=<?= urlencode($row['username']) ?>&email=<?= urlencode($row['email']) ?>&status=<?= htmlspecialchars($row['status']) ?>&role=<?= urlencode($row['role_name']) ?>"
                                                                 class="btn btn-edit"
                                                                 title="Edit User">
                                                                 <i class="fas fa-pen"></i>
@@ -357,6 +359,7 @@ $result = $conn->query($sql);
                                                                 title="View Details"
                                                                 data-user-id="<?= $row['id'] ?>"
                                                                 data-user-name="<?= htmlspecialchars($row['name']) ?>"
+                                                                data-user-username="<?= htmlspecialchars($row['username']) ?>"
                                                                 data-user-email="<?= htmlspecialchars($row['email']) ?>"
                                                                 data-user-mobile="<?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?>"
                                                                 data-user-nic="<?= isset($row['nic']) ? htmlspecialchars($row['nic']) : 'N/A' ?>"
@@ -380,7 +383,7 @@ $result = $conn->query($sql);
                                             <?php endwhile; ?>
                                         <?php else: ?>
                                             <tr>
-                                                <td colspan="6" class="text-center py-4">
+                                                <td colspan="8" class="text-center py-4">
                                                     <div class="empty-state">
                                                         <i class="fas fa-users"></i>
                                                         <p>No users found</p>
@@ -446,6 +449,7 @@ $result = $conn->query($sql);
             btn.addEventListener('click', function() {
                 const userData = {
                     name: this.getAttribute('data-user-name'),
+                    username: this.getAttribute('data-user-username'),
                     email: this.getAttribute('data-user-email'),
                     mobile: this.getAttribute('data-user-mobile'),
                     nic: this.getAttribute('data-user-nic'),
@@ -461,6 +465,10 @@ $result = $conn->query($sql);
                         <div class="detail-card">
                             <span class="detail-label"><i class="fas fa-user"></i>Name</span>
                             <p class="detail-value">${userData.name}</p>
+                        </div>
+                        <div class="detail-card">
+                            <span class="detail-label"><i class="fas fa-user-tag"></i>Username</span>
+                            <p class="detail-value">${userData.username}</p>
                         </div>
                         <div class="detail-card">
                             <span class="detail-label"><i class="fas fa-envelope"></i>Email</span>

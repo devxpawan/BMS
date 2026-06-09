@@ -63,6 +63,7 @@ if (!isset($_SESSION['csrf_token'])) {
 
     // Determine values to display (prioritize GET parameters for form repopulation)
     $name = isset($_GET['name']) ? urldecode($_GET['name']) : $user['name'];
+    $username = isset($_GET['username']) ? urldecode($_GET['username']) : $user['username'];
     $email = isset($_GET['email']) ? urldecode($_GET['email']) : $user['email'];
     $mobile = isset($_GET['mobile']) ? urldecode($_GET['mobile']) : $user['mobile'];
     $nic = isset($_GET['nic']) ? urldecode($_GET['nic']) : $user['nic'];
@@ -161,6 +162,15 @@ if (!isset($_SESSION['csrf_token'])) {
                                                 placeholder="Full Name" 
                                                 value="<?php echo htmlspecialchars($name); ?>" data-original="<?php echo htmlspecialchars($name); ?>" required>
                                             <div class="error-feedback" id="name-error"></div>
+                                        </div>
+
+                                        <!-- Username Field -->
+                                        <div class="mb-3">
+                                            <label for="username" class="form-label">Username</label>
+                                            <input type="text" class="form-control" id="username" name="username"
+                                                placeholder="Username"
+                                                value="<?php echo htmlspecialchars($username); ?>" data-original="<?php echo htmlspecialchars($username); ?>" required>
+                                            <div class="error-feedback" id="username-error"></div>
                                         </div>
 
                                         <!-- Email Field -->
@@ -655,43 +665,27 @@ function validateField(inputElement, validationFunction, errorElement) {
     }
 }
 
-// Auto-convert email to lowercase
+// Auto-convert email to lowercase in real-time
 const emailInput = document.getElementById('email');
 emailInput.addEventListener('input', function() {
-    // Get cursor position before change
     const start = this.selectionStart;
     const end = this.selectionEnd;
-    
-    // Convert to lowercase
     this.value = this.value.toLowerCase();
-    
-    // Restore cursor position
     this.setSelectionRange(start, end);
 });
 
 // Mobile handling - strip non-digits as user types
 const mobileInput = document.getElementById('mobile');
 mobileInput.addEventListener('input', function(e) {
-    // Get only digits from the input
     let digits = this.value.replace(/\D/g, '');
-    
-    // Store cursor position
     const cursorPos = this.selectionStart;
     const oldLength = this.value.length;
-    
-    // Limit to 10 digits
     if (digits.length > 10) {
         digits = digits.substring(0, 10);
     }
-    
-    // Update the input value with only digits
     this.value = digits;
-    
-    // Adjust cursor position if text changed
     const newLength = this.value.length;
     const cursorAdjust = newLength - oldLength;
-    
-    // Only set selection range if the element is focused
     if (document.activeElement === this) {
         let newPos = cursorPos + cursorAdjust;
         if (newPos < 0) newPos = 0;
@@ -699,6 +693,28 @@ mobileInput.addEventListener('input', function(e) {
         this.setSelectionRange(newPos, newPos);
     }
 });
+
+// Real-time availability check via AJAX
+function checkFieldAvailability(endpoint, paramName, value, excludeId, callback) {
+    const xhr = new XMLHttpRequest();
+    let url = '<?= BASE_URL ?>modules/api/' + endpoint + '?' + paramName + '=' + encodeURIComponent(value);
+    if (excludeId) {
+        url += '&exclude_id=' + encodeURIComponent(excludeId);
+    }
+    xhr.open('GET', url, true);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                callback(response);
+            } catch(e) {
+                callback({ available: true });
+            }
+        }
+    };
+    xhr.send();
+}
 
 // Initialize validation functions for each field
 const validateEmailField = setupValidation('email', validateEmail, 'email-error');
@@ -709,23 +725,176 @@ const validateNICField = setupValidation('nic', validateNIC, 'nic-error');
 const validateAddressField = setupValidation('address', validateAddress, 'address-error');
 const validateRoleField = setupValidation('role_id', validateRole, 'role-error');
 
+const currentUserId = <?php echo $user_id; ?>;
+
+// Enhanced username validation with real-time availability check
+const usernameInput = document.getElementById('username');
+const usernameError = document.getElementById('username-error');
+let usernameAvailable = true;
+let usernameChecked = true;
+let usernameCheckTimer;
+
+const validateUsernameField = function() {
+    return new Promise((resolve) => {
+        const value = usernameInput.value.trim();
+        const originalValue = usernameInput.getAttribute('data-original');
+        usernameInput.classList.remove('is-invalid');
+        usernameInput.classList.remove('is-valid');
+        usernameError.style.display = 'none';
+
+        if (value === '') {
+            usernameInput.classList.add('is-invalid');
+            usernameError.textContent = 'Username is required';
+            usernameError.style.display = 'block';
+            usernameChecked = false;
+            resolve(false);
+            return;
+        }
+
+        const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+        if (!usernameRegex.test(value)) {
+            usernameInput.classList.add('is-invalid');
+            usernameError.textContent = 'Username must be 3-50 characters and can only contain letters, numbers, and underscores';
+            usernameError.style.display = 'block';
+            usernameChecked = false;
+            resolve(false);
+            return;
+        }
+
+        if (value === originalValue) {
+            usernameInput.classList.add('is-valid');
+            usernameAvailable = true;
+            usernameChecked = true;
+            resolve(true);
+            return;
+        }
+
+        checkFieldAvailability('check_username.php', 'username', value, currentUserId, function(response) {
+            usernameChecked = true;
+            if (response.available) {
+                usernameInput.classList.add('is-valid');
+                usernameAvailable = true;
+                resolve(true);
+            } else {
+                usernameInput.classList.add('is-invalid');
+                usernameError.textContent = response.message || 'Username is already taken';
+                usernameError.style.display = 'block';
+                usernameAvailable = false;
+                resolve(false);
+            }
+        });
+    });
+};
+
+usernameInput.addEventListener('input', function() {
+    clearTimeout(usernameCheckTimer);
+    usernameCheckTimer = setTimeout(() => {
+        validateUsernameField();
+        checkForChanges();
+    }, 600);
+});
+
+usernameInput.addEventListener('blur', function() {
+    clearTimeout(usernameCheckTimer);
+    validateUsernameField();
+});
+
+// Enhanced email validation with real-time availability check
+const emailError = document.getElementById('email-error');
+let emailAvailable = true;
+let emailChecked = true;
+let emailCheckTimer;
+
+const validateEmailFieldAsync = function() {
+    return new Promise((resolve) => {
+        const value = emailInput.value.trim().toLowerCase();
+        const originalValue = emailInput.getAttribute('data-original');
+        emailInput.classList.remove('is-invalid');
+        emailInput.classList.remove('is-valid');
+        emailError.style.display = 'none';
+
+        if (value === '') {
+            emailInput.classList.add('is-invalid');
+            emailError.textContent = 'Email address cannot be empty';
+            emailError.style.display = 'block';
+            emailChecked = false;
+            resolve(false);
+            return;
+        }
+
+        const formatResult = validateEmail(value);
+        if (!formatResult.valid) {
+            emailInput.classList.add('is-invalid');
+            emailError.textContent = formatResult.message;
+            emailError.style.display = 'block';
+            emailChecked = false;
+            resolve(false);
+            return;
+        }
+
+        if (value === originalValue) {
+            emailInput.classList.add('is-valid');
+            emailAvailable = true;
+            emailChecked = true;
+            resolve(true);
+            return;
+        }
+
+        checkFieldAvailability('check_email.php', 'email', value, currentUserId, function(response) {
+            emailChecked = true;
+            if (response.available) {
+                emailInput.classList.add('is-valid');
+                emailAvailable = true;
+                resolve(true);
+            } else {
+                emailInput.classList.add('is-invalid');
+                emailError.textContent = response.message || 'Email is already in use';
+                emailError.style.display = 'block';
+                emailAvailable = false;
+                resolve(false);
+            }
+        });
+    });
+};
+
+emailInput.addEventListener('input', function() {
+    clearTimeout(emailCheckTimer);
+    emailCheckTimer = setTimeout(() => {
+        validateEmailFieldAsync();
+        checkForChanges();
+    }, 600);
+});
+
+emailInput.addEventListener('blur', function() {
+    clearTimeout(emailCheckTimer);
+    validateEmailFieldAsync();
+});
+
 // Client-side form validation
 document.getElementById('editUserForm').addEventListener('submit', function(event) {
     let isValid = true;
     
-    // Validate all fields
     if (!validateNameField()) isValid = false;
-    if (!validateEmailField()) isValid = false;
     if (!validatePasswordField()) isValid = false;
     if (!validateMobileField()) isValid = false;
     if (!validateNICField()) isValid = false;
     if (!validateAddressField()) isValid = false;
     if (!validateRoleField()) isValid = false;
+
+    const usernameVal = usernameInput.value.trim();
+    const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+    if (!usernameVal || !usernameRegex.test(usernameVal)) {
+        isValid = false;
+    }
+
+    const emailVal = emailInput.value.trim().toLowerCase();
+    const emailFormatResult = validateEmail(emailVal);
+    if (!emailVal || !emailFormatResult.valid) {
+        isValid = false;
+    }
     
     if (!isValid) {
         event.preventDefault();
-        
-        // Scroll to the first error
         const firstError = document.querySelector('.is-invalid');
         if (firstError) {
             firstError.focus();
@@ -734,8 +903,24 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
         return;
     }
 
+    const needUsernameCheck = !usernameChecked || !usernameAvailable;
+    const needEmailCheck = !emailChecked || !emailAvailable;
+
+    if (needUsernameCheck || needEmailCheck) {
+        event.preventDefault();
+        const promises = [];
+        if (needUsernameCheck) promises.push(validateUsernameField());
+        if (needEmailCheck) promises.push(validateEmailFieldAsync());
+        Promise.all(promises).then(function(results) {
+            if (results.every(r => r === true)) {
+                document.getElementById('editUserForm').submit();
+            }
+        });
+        return;
+    }
+
     // Check if any field has changed
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
+    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -744,7 +929,6 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
             break;
         }
     }
-    // Password field: if filled in, treat as a change
     const pwEl = document.getElementById('password');
     if (pwEl && pwEl.value.trim() !== '') {
         hasChanged = true;
@@ -757,7 +941,7 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
 
 // Enable/disable submit button based on whether any field changed
 function checkForChanges() {
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
+    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -774,7 +958,7 @@ function checkForChanges() {
 }
 
 // Attach listeners to all tracked fields
-['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id', 'password'].forEach(function(id) {
+['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id', 'password'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
         el.addEventListener('input', checkForChanges);

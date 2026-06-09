@@ -112,23 +112,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $stmt->close();
 
+        // Handle username field
+        $username = trim(filter_input(INPUT_POST, 'username', FILTER_SANITIZE_SPECIAL_CHARS));
+        if (empty($username)) {
+            $errors[] = "Username is required.";
+        } elseif (!preg_match('/^[a-zA-Z0-9_]{3,50}$/', $username)) {
+            $errors[] = "Username must be 3-50 characters and can only contain letters, numbers, and underscores.";
+        } else {
+            // Check for duplicate username
+            $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result->num_rows > 0) {
+                $errors[] = "Username already in use.";
+            }
+            $stmt->close();
+        }
+
         if (!empty($errors)) {
             $errorMsg = implode("<br>", $errors);
         } else {
             $conn->begin_transaction();
             if (!empty($password)) {
                 $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-                $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("ssssssiss",
-                    $name, $email, $mobile, $nic, $address,
+                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssssssiss",
+                    $name, $username, $email, $mobile, $nic, $address,
                     $status, $role_id, $position_id, $hashed_password
                 );
             } else {
-                $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, created_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("ssssssii",
-                    $name, $email, $mobile, $nic, $address,
+                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssssssii",
+                    $name, $username, $email, $mobile, $nic, $address,
                     $status, $role_id, $position_id
                 );
             }
@@ -207,51 +225,59 @@ if (isset($_SESSION['success_message'])) {
                             <!-- CSRF Token -->
                             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             
-                            <div class="row">
-                                <!-- User Details Section -->
-                                <div class="col-md-6">
-                                    <div class="premium-section-header">
-                                        <i class="fas fa-user-circle me-2"></i> User Details
-                                    </div>
+            <div class="row">
+                <!-- User Details Section -->
+                <div class="col-md-6">
+                    <div class="premium-section-header">
+                        <i class="fas fa-user-circle me-2"></i> User Details
+                    </div>
 
-                                        <!-- Name Field -->
-                                        <div class="mb-3">
-                                            <label for="name" class="form-label">Full Name</label>
-                                            <input type="text" class="form-control" id="name" name="name"
-                                                placeholder="Full Name" required>
-                                            <div class="error-feedback" id="name-error"></div>
-                                        </div>
+                        <!-- Name Field -->
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="name" name="name"
+                                placeholder="Full Name" required>
+                            <div class="error-feedback" id="name-error"></div>
+                        </div>
 
-                                        <!-- Email Field -->
-                                        <div class="mb-3">
-                                            <label for="email" class="form-label">Email Address</label>
-                                            <input type="email" class="form-control" id="email" name="email"
-                                                placeholder="name@example.com" required>
-                                            <div class="error-feedback" id="email-error"></div>
-                                        </div>
+                        <!-- Username Field -->
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username"
+                                placeholder="Choose a username" required>
+                            <div class="error-feedback" id="username-error"></div>
+                        </div>
 
-                                        <!-- Password Field -->
-                                        <div class="mb-3">
-                                            <label for="password" class="form-label">Password</label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control" id="password"
-                                                    name="password" placeholder="Password" required>
-                                                <button class="btn btn-outline-secondary toggle-password"
-                                                    type="button">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
-                                            </div>
-                                            <div class="error-feedback" id="password-error"></div>
-                                        </div>
+                        <!-- Email Field -->
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email Address</label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                placeholder="name@example.com" required>
+                            <div class="error-feedback" id="email-error"></div>
+                        </div>
 
-                                        <!-- Mobile Field -->
-                                        <div class="mb-3">
-                                            <label for="mobile" class="form-label">Mobile Number</label>
-                                            <input type="tel" class="form-control" id="mobile" name="mobile"
-                                                placeholder="Enter 10-digit mobile number">
-                                            <div class="error-feedback" id="mobile-error"></div>
-                                        </div>
-                                    </div>
+                        <!-- Password Field -->
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="password"
+                                    name="password" placeholder="Password" required>
+                                <button class="btn btn-outline-secondary toggle-password"
+                                    type="button">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="error-feedback" id="password-error"></div>
+                        </div>
+
+                        <!-- Mobile Field -->
+                        <div class="mb-3">
+                            <label for="mobile" class="form-label">Mobile Number</label>
+                            <input type="tel" class="form-control" id="mobile" name="mobile"
+                                placeholder="Enter 10-digit mobile number">
+                            <div class="error-feedback" id="mobile-error"></div>
+                        </div>
+                    </div>
 
                                     <!-- Configuration Details Section -->
                                     <div class="col-md-6">
@@ -605,6 +631,47 @@ function validatePassword(password) {
         };
     }
 
+    // Username validation function
+    function validateUsername(username) {
+        if (username.trim() === '') {
+            return {
+                valid: false,
+                message: 'Username cannot be empty'
+            };
+        }
+        
+        const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+        if (!usernameRegex.test(username)) {
+            return {
+                valid: false,
+                message: 'Username must be 3-50 characters and can only contain letters, numbers, and underscores'
+            };
+        }
+        
+        return {
+            valid: true,
+            message: ''
+        };
+    }
+
+    // Real-time availability check via AJAX
+    function checkFieldAvailability(endpoint, paramName, value, callback) {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', '<?= BASE_URL ?>modules/api/' + endpoint + '?' + paramName + '=' + encodeURIComponent(value), true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    callback(response);
+                } catch(e) {
+                    callback({ available: true });
+                }
+            }
+        };
+        xhr.send();
+    }
+
     // Role validation function
     function validateRole(roleId) {
         if (roleId.trim() === '') {
@@ -705,18 +772,71 @@ function validatePassword(password) {
     const validateAddressField = setupValidation('address', validateAddress, 'address-error');
     const validateRoleField = setupValidation('role_id', validateRole, 'role-error');
 
-    // Auto-convert email to lowercase
-    const emailInput = document.getElementById('email');
-    emailInput.addEventListener('input', function() {
-        // Get cursor position before change
-        const start = this.selectionStart;
-        const end = this.selectionEnd;
-        
-        // Convert to lowercase
-        this.value = this.value.toLowerCase();
-        
-        // Restore cursor position
-        this.setSelectionRange(start, end);
+    // Enhanced username validation with real-time availability check
+    const usernameInput = document.getElementById('username');
+    const usernameError = document.getElementById('username-error');
+    let usernameAvailable = false;
+    let usernameChecked = false;
+    let usernameCheckTimer;
+
+    const validateUsernameField = function() {
+        return new Promise((resolve) => {
+            const value = usernameInput.value.trim();
+            usernameInput.classList.remove('is-invalid');
+            usernameInput.classList.remove('is-valid');
+            usernameError.style.display = 'none';
+
+            // Empty check
+            if (value === '') {
+                usernameInput.classList.add('is-invalid');
+                usernameError.textContent = 'Username is required';
+                usernameError.style.display = 'block';
+                usernameChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Format check
+            const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+            if (!usernameRegex.test(value)) {
+                usernameInput.classList.add('is-invalid');
+                usernameError.textContent = 'Username must be 3-50 characters and can only contain letters, numbers, and underscores';
+                usernameError.style.display = 'block';
+                usernameChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Check availability via AJAX
+            checkFieldAvailability('check_username.php', 'username', value, function(response) {
+                usernameChecked = true;
+                if (response.available) {
+                    usernameInput.classList.add('is-valid');
+                    usernameAvailable = true;
+                    resolve(true);
+                } else {
+                    usernameInput.classList.add('is-invalid');
+                    usernameError.textContent = response.message || 'Username is already taken';
+                    usernameError.style.display = 'block';
+                    usernameAvailable = false;
+                    resolve(false);
+                }
+            });
+        });
+    };
+
+    // Real-time username checking as user types (with debounce)
+    usernameInput.addEventListener('input', function() {
+        clearTimeout(usernameCheckTimer);
+        usernameCheckTimer = setTimeout(() => {
+            validateUsernameField();
+        }, 600);
+    });
+
+    // Check on blur
+    usernameInput.addEventListener('blur', function() {
+        clearTimeout(usernameCheckTimer);
+        validateUsernameField();
     });
 
     // Mobile handling - strip non-digits as user types
@@ -750,19 +870,106 @@ function validatePassword(password) {
         }
     });
 
+    // Enhanced email validation with real-time availability check
+    const emailInput = document.getElementById('email');
+    // Auto-convert email to lowercase in real-time
+    emailInput.addEventListener('input', function() {
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.toLowerCase();
+        this.setSelectionRange(start, end);
+    });
+    const emailError = document.getElementById('email-error');
+    let emailAvailable = false;
+    let emailChecked = false;
+    let emailCheckTimer;
+
+    const validateEmailFieldAsync = function() {
+        return new Promise((resolve) => {
+            const value = emailInput.value.trim().toLowerCase();
+            emailInput.classList.remove('is-invalid');
+            emailInput.classList.remove('is-valid');
+            emailError.style.display = 'none';
+
+            // Empty check
+            if (value === '') {
+                emailInput.classList.add('is-invalid');
+                emailError.textContent = 'Email address cannot be empty';
+                emailError.style.display = 'block';
+                emailChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Format check (use existing validateEmail)
+            const formatResult = validateEmail(value);
+            if (!formatResult.valid) {
+                emailInput.classList.add('is-invalid');
+                emailError.textContent = formatResult.message;
+                emailError.style.display = 'block';
+                emailChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Check availability via AJAX
+            checkFieldAvailability('check_email.php', 'email', value, function(response) {
+                emailChecked = true;
+                if (response.available) {
+                    emailInput.classList.add('is-valid');
+                    emailAvailable = true;
+                    resolve(true);
+                } else {
+                    emailInput.classList.add('is-invalid');
+                    emailError.textContent = response.message || 'Email is already in use';
+                    emailError.style.display = 'block';
+                    emailAvailable = false;
+                    resolve(false);
+                }
+            });
+        });
+    };
+
+    // Real-time email checking as user types (with debounce)
+    emailInput.addEventListener('input', function() {
+        clearTimeout(emailCheckTimer);
+        emailCheckTimer = setTimeout(() => {
+            validateEmailFieldAsync();
+        }, 600);
+    });
+
+    // Check on blur
+    emailInput.addEventListener('blur', function() {
+        clearTimeout(emailCheckTimer);
+        validateEmailFieldAsync();
+    });
+
     // Client-side form validation
     document.getElementById('addUserForm').addEventListener('submit', function(event) {
         let isValid = true;
         
         // Validate all fields
         if (!validateNameField()) isValid = false;
-        if (!validateEmailField()) isValid = false;
         if (!validatePasswordField()) isValid = false;
         if (!validateMobileField()) isValid = false;
         if (!validateNICField()) isValid = false;
         if (!validateAddressField()) isValid = false;
         if (!validateRoleField()) isValid = false;
+
+        // Synchronous checks for email and username formats
+        const emailVal = emailInput.value.trim().toLowerCase();
+        const emailFormatResult = validateEmail(emailVal);
+        if (!emailVal || !emailFormatResult.valid) {
+            isValid = false;
+        }
+
+        const usernameVal = document.getElementById('username').value.trim();
+        const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+        if (!usernameVal || !usernameRegex.test(usernameVal)) {
+            isValid = false;
+        }
         
+        // If there are other validation errors, prevent submit and show them
         if (!isValid) {
             event.preventDefault();
             
@@ -772,6 +979,27 @@ function validatePassword(password) {
                 firstError.focus();
                 firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+            return;
+        }
+
+        // Check async validations (username & email availability)
+        const needUsernameCheck = !usernameChecked || !usernameAvailable;
+        const needEmailCheck = !emailChecked || !emailAvailable;
+
+        if (needUsernameCheck || needEmailCheck) {
+            event.preventDefault();
+            
+            const promises = [];
+            if (needUsernameCheck) promises.push(validateUsernameField());
+            if (needEmailCheck) promises.push(validateEmailFieldAsync());
+            
+            Promise.all(promises).then(function(results) {
+                const allValid = results.every(r => r === true);
+                if (allValid) {
+                    document.getElementById('addUserForm').submit();
+                }
+            });
+            return;
         }
     });
     </script>

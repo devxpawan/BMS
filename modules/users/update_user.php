@@ -100,6 +100,16 @@ try {
         }
     }
 
+    // Handle username field
+    $username = isset($_POST['username']) ? trim($_POST['username']) : '';
+    
+    // Validate username
+    if (empty($username)) {
+        $errors[] = "Username is required.";
+    } elseif (!preg_match('/^[a-zA-Z0-9_]{3,50}$/', $username)) {
+        $errors[] = "Username must be 3-50 characters and can only contain letters, numbers, and underscores.";
+    }
+
     // Check for duplicate email
     $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
@@ -107,6 +117,16 @@ try {
     $result = $stmt->get_result();
     if ($result->num_rows > 0) {
         $errors[] = "Email already in use.";
+    }
+    $stmt->close();
+
+    // Check for duplicate username
+    $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $errors[] = "Username already in use.";
     }
     $stmt->close();
 
@@ -118,22 +138,22 @@ try {
     // Begin database transaction
     $conn->begin_transaction();
 
-    // Prepare insert query with position_id
+    // Prepare insert query with username and position_id
     if (!empty($password)) {
         // Insert with password 
         $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssssssiss", 
-            $name, $email, $mobile, $nic, $address, 
+        $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("sssssssiss", 
+            $name, $username, $email, $mobile, $nic, $address, 
             $status, $role_id, $position_id, $hashed_password
         );
     } else {
         // Insert without password
-        $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssssssii", 
-            $name, $email, $mobile, $nic, $address, 
+        $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("sssssssii", 
+            $name, $username, $email, $mobile, $nic, $address, 
             $status, $role_id, $position_id
         );
     }

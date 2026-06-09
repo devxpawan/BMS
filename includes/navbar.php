@@ -17,9 +17,10 @@ $user = null;
 
 if (isset($_SESSION['user_id'])) {
     $stmt = $conn->prepare("
-        SELECT u.*, r.name as role_name 
+        SELECT u.*, r.name as role_name, p.name as position_name 
         FROM users u 
         LEFT JOIN roles r ON u.role_id = r.id 
+        LEFT JOIN positions p ON u.position_id = p.id 
         WHERE u.id = ?
     ");
     $stmt->bind_param("i", $_SESSION['user_id']);
@@ -39,10 +40,6 @@ function getUserInitials($name) {
 ?>
 
 <style>
-/* ═══════════════════════════════════════════════════════════════
-   GLASSMORPHISM HEADER — Fixed Top Navigation
-   ═══════════════════════════════════════════════════════════════ */
-
 .navbar-glass {
     position: fixed;
     top: 0;
@@ -549,7 +546,7 @@ function getUserInitials($name) {
                 <div class="nav-avatar"><?= getUserInitials($user['name']) ?></div>
                 <div class="nav-user-info d-none d-lg-flex">
                     <span class="nav-user-name"><?= htmlspecialchars($user['name'] ?? 'User') ?></span>
-                    <span class="nav-user-role"><?= htmlspecialchars($user['role_name'] ?? 'Staff') ?></span>
+                    <span class="nav-user-role"><?= htmlspecialchars($user['position_name'] ?? $user['role_name'] ?? 'Staff') ?></span>
                 </div>
                 <i class="fas fa-chevron-down nav-chevron d-none d-lg-block"></i>
             </a>

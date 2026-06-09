@@ -122,7 +122,7 @@ if ($tableExists && $tableExists->num_rows > 0) {
 
 <head>
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
-    <title>Dashboard - FEIT Admin</title>
+    <title>Dashboard</title>
     <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
     <link href="<?= BASE_URL ?>css/invoice-list.css" rel="stylesheet" />
     <link href="<?= BASE_URL ?>css/dashboard.css" rel="stylesheet" />

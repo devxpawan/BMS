@@ -37,8 +37,8 @@ $offset = ($page - 1) * $limit;
 // Build WHERE conditions
 $conditions = [];
 if (!empty($filter_user)) {
-    $s = $conn->real_escape_string($filter_user);
-    $conditions[] = "users.name LIKE '%$s%'";
+    $s = (int) $filter_user;
+    $conditions[] = "user_logs.user_id = $s";
 }
 if ($filter_action_type !== '') {
     $s = $conn->real_escape_string($filter_action_type);
@@ -60,6 +60,9 @@ if (!empty($conditions)) {
 // Fetch distinct action types for filter dropdown
 $actionTypesResult = $conn->query("SELECT DISTINCT action_type FROM user_logs ORDER BY action_type");
 
+// Fetch all users for the user filter dropdown
+$usersResult = $conn->query("SELECT id, name FROM users ORDER BY name");
+
 // Build SQL queries
 $countSql = "SELECT COUNT(*) as total FROM user_logs LEFT JOIN users ON user_logs.user_id = users.id$whereClause";
 $sql = "SELECT user_logs.*, users.name as user_name FROM user_logs 
@@ -76,12 +79,12 @@ $totalPages = ceil($totalRows / $limit);
 
 $result = $conn->query($sql);
 
-// Enhanced function to format details text with collapsible changes
+// Enhanced function to format details text with changes shown directly
 function formatDetailsText($details, $userId, $userName, $actionType) {
     // Replace user ID with user name and ID
     $userInfo = !empty($userName) ? "$userName($userId)" : "ID #$userId";
     
-    // For edit actions, format the changes as bullet points and make them collapsible
+    // For edit actions, show the changes directly as bullet points
     if (strpos($actionType, 'edit_') !== false) {
         // Check if the details mention changes
         if (strpos($details, 'Changes:') !== false) {
@@ -93,20 +96,14 @@ function formatDetailsText($details, $userId, $userName, $actionType) {
             // Replace "by user ID #X" with "by user Name(ID)"
             $actionPart = preg_replace("/by user ID #(\d+)/i", "by user $userInfo", $actionPart);
             
-            // Create collapsible changes section with unique ID
-            $uniqueId = 'changes_' . uniqid();
             $output = $actionPart . ' ';
             
-            // Format the changes as bullet points inside a collapsible div
+            // Format the changes as bullet points directly
             if (!empty($changesPart)) {
-                // Add show/hide button
-                $output .= '<button class="btn btn-sm btn-outline-secondary toggle-changes" data-bs-toggle="collapse" data-bs-target="#' . $uniqueId . '">Show Changes</button>';
-                $output .= '<div class="collapse mt-2" id="' . $uniqueId . '">';
-                
                 // Split changes by semicolon or comma
                 $changes = preg_split('/[;,]\s*/', $changesPart);
                 
-                $changesList = "<ul class='mb-0 ps-3'>";
+                $changesList = "<ul class='mb-0 ps-3 mt-1'>";
                 foreach ($changes as $change) {
                     $change = trim($change);
                     if (!empty($change)) {
@@ -116,7 +113,6 @@ function formatDetailsText($details, $userId, $userName, $actionType) {
                 $changesList .= "</ul>";
                 
                 $output .= $changesList;
-                $output .= '</div>';
                 
                 return $output;
             }
@@ -143,26 +139,44 @@ function hasMultipleChanges($details) {
     <link rel="stylesheet" href="<?= BASE_URL ?>css/forms.css">
     <style>
         .details-cell {
-            max-width: 400px;
+            max-width: 300px;
         }
         .details-cell ul {
             margin-top: 5px;
+            padding-left: 18px;
         }
         .details-cell li {
             text-align: left;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-bottom: 2px;
         }
         .action-type-text {
             min-width: 100px;
             display: inline-block;
         }
-        .toggle-changes.collapsed::after {
-            content: " \25BC";
+        .table-users {
+            table-layout: fixed;
         }
-        .toggle-changes:not(.collapsed)::after {
-            content: " \25B2";
+        .table-users th:nth-child(1),
+        .table-users td:nth-child(1) {
+            width: 80px;
         }
-        .toggle-changes:not(.collapsed) {
-            margin-bottom: 5px;
+        .table-users th:nth-child(2),
+        .table-users td:nth-child(2) {
+            width: 120px;
+        }
+        .table-users th:nth-child(3),
+        .table-users td:nth-child(3) {
+            width: 110px;
+        }
+        .table-users th:nth-child(4),
+        .table-users td:nth-child(4) {
+            width: 300px;
+        }
+        .table-users th:nth-child(5),
+        .table-users td:nth-child(5) {
+            width: 120px;
         }
     </style>
 </head>
@@ -188,8 +202,12 @@ function hasMultipleChanges($details) {
                                     <div class="row g-2 align-items-end">
                                         <div class="col-md-3 col-lg-2">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">User</label>
-                                            <input type="text" name="filter_user" class="form-control" placeholder="User name"
-                                                value="<?= htmlspecialchars($filter_user) ?>">
+                                            <select name="filter_user" class="form-select">
+                                                <option value="">All Users</option>
+                                                <?php if ($usersResult): while ($u = $usersResult->fetch_assoc()): ?>
+                                                    <option value="<?= $u['id'] ?>" <?= $filter_user == $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
+                                                <?php endwhile; endif; ?>
+                                            </select>
                                         </div>
                                         <div class="col-md-3 col-lg-2">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Action Type</label>
@@ -323,16 +341,7 @@ function hasMultipleChanges($details) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_URL ?>js/scripts.js"></script>
     <script>
-    $(document).ready(function() {
-        // Toggle button text when clicked
-        $('.toggle-changes').on('click', function() {
-            if ($(this).hasClass('collapsed') || !$(this).attr('aria-expanded') || $(this).attr('aria-expanded') === 'false') {
-                $(this).text('Hide Changes');
-            } else {
-                $(this).text('Show Changes');
-            }
-        });
-    });
+    // No additional scripts needed
     </script>
 </body>
 
