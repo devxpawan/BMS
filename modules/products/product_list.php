@@ -84,29 +84,31 @@ if(isset($_POST['toggle_status'])) {
     exit();
 }
 
-// Initialize search parameters
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 10;
+// Initialize filter parameters
+$filter_name = isset($_GET['filter_name']) ? trim($_GET['filter_name']) : '';
+$filter_status = isset($_GET['filter_status']) ? trim($_GET['filter_status']) : '';
+$limit = 10;
 $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Build basic SQL query
-$countSql = "SELECT COUNT(*) as total FROM products";
-$sql = "SELECT * FROM products";
-
-// Add search condition if search term is provided
-if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " WHERE id LIKE '%$searchTerm%' OR 
-                        name LIKE '%$searchTerm%' OR 
-                        description LIKE '%$searchTerm%' OR
-                        status LIKE '%$searchTerm%'";
-    $countSql .= $searchCondition;
-    $sql .= $searchCondition;
+// Build WHERE conditions
+$conditions = [];
+if (!empty($filter_name)) {
+    $s = $conn->real_escape_string($filter_name);
+    $conditions[] = "name LIKE '%$s%'";
+}
+if ($filter_status !== '') {
+    $s = $conn->real_escape_string($filter_status);
+    $conditions[] = "status = '$s'";
+}
+$whereClause = '';
+if (!empty($conditions)) {
+    $whereClause = ' WHERE ' . implode(' AND ', $conditions);
 }
 
-// Add order by and pagination
-$sql .= " ORDER BY id DESC LIMIT $limit OFFSET $offset";
+// Build SQL queries
+$countSql = "SELECT COUNT(*) as total FROM products$whereClause";
+$sql = "SELECT * FROM products$whereClause ORDER BY id DESC LIMIT $limit OFFSET $offset";
 
 // Execute the queries
 $countResult = $conn->query($countSql);
@@ -164,46 +166,41 @@ $result = $conn->query($sql);
                     <div class="card product-card">
                         <div class="card-body">
                             <!-- Filter Bar -->
-                            <div class="invoice-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4"
-                                            placeholder=" Search by name, ID, status..."
-                                            value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="invoice-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Name</label>
+                                            <input type="text" name="filter_name" class="form-control" placeholder="Product name"
+                                                value="<?= htmlspecialchars($filter_name) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Status</label>
+                                            <select name="filter_status" class="form-select">
+                                                <option value="">All</option>
+                                                <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>>Active</option>
+                                                <option value="inactive" <?= $filter_status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/products/product_list.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter">
-                                        <i class="fas fa-search me-1"></i> Search
-                                    </button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/products/product_list.php" class="btn btn-outline-secondary btn-clear">
-                                            <i class="fas fa-times me-1"></i> Clear
-                                        </a>
-                                    <?php endif; ?>
-                                    <input type="hidden" name="limit" value="<?php echo $limit; ?>">
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <form method="get" id="limitForm" class="d-flex align-items-center gap-2">
-                                    <?php if (!empty($search)): ?>
-                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="page" value="1">
-                                    <span class="entries-label">Show</span>
-                                    <select name="limit" class="form-select"
-                                        style="width: 80px;"
-                                        onchange="document.getElementById('limitForm').submit()">
-                                        <option value="10" <?php if ($limit == 10) echo 'selected'; ?>>10</option>
-                                        <option value="25" <?php if ($limit == 25) echo 'selected'; ?>>25</option>
-                                        <option value="50" <?php if ($limit == 50) echo 'selected'; ?>>50</option>
-                                        <option value="100" <?php if ($limit == 100) echo 'selected'; ?>>100</option>
-                                    </select>
-                                    <span class="entries-label">entries</span>
-                                </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($filter_name) || $filter_status !== ''): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> Product<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
-
-                            <?php if (!empty($search)): ?>
-                                <div class="search-count"><?php echo $totalRows; ?> Products<?= $totalRows !== 1 ? 's' : '' ?></div>
-                            <?php endif; ?>
 
                             <div class="table-responsive">
                                 <table class="table table-product" id="productsTable">
@@ -246,7 +243,7 @@ $result = $conn->query($sql);
                                                         <?php if ($status == 'active'): ?>
                                                             <span class="badge-soft badge-soft-success">Active</span>
                                                         <?php else: ?>
-                                                            <span class="badge-soft badge-soft-secondary">Inactive</span>
+                                                            <span class="badge-soft badge-soft-danger">Inactive</span>
                                                         <?php endif; ?>
                                                     </td>
                                                     <td>
@@ -328,7 +325,7 @@ $result = $conn->query($sql);
                                                                             <?php if ($status == 'active'): ?>
                                                                                 <span class="badge-soft badge-soft-success">Active</span>
                                                                             <?php else: ?>
-                                                                                <span class="badge-soft badge-soft-secondary">Inactive</span>
+                                                                                <span class="badge-soft badge-soft-danger">Inactive</span>
                                                                             <?php endif; ?>
                                                                         </p>
                                                                     </div>
@@ -366,61 +363,7 @@ $result = $conn->query($sql);
                                         Showing <strong>0</strong> to <strong>0</strong> of <strong>0</strong> entries
                                     <?php endif; ?>
                                 </div>
-                                <nav aria-label="Page navigation">
-                                    <ul class="pagination mb-0">
-                                        <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-left"></i>
-                                            </a>
-                                        </li>
-
-                                        <?php
-                                        // Display a limited number of page links
-                                        $maxPagesToShow = 5;
-                                        $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
-                                        $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-
-                                        // Show "..." before the first page link if needed
-                                        if ($startPage > 1): ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=1&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">1</a>
-                                            </li>
-                                            <?php if ($startPage > 2): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-
-                                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                                            <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                                <a class="page-link"
-                                                    href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                            </li>
-                                        <?php endfor; ?>
-
-                                        <?php 
-                                        // Show "..." after the last page link if needed
-                                        if ($endPage < $totalPages): ?>
-                                            <?php if ($endPage < $totalPages - 1): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=<?php echo $totalPages; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $totalPages; ?></a>
-                                            </li>
-                                        <?php endif; ?>
-
-                                        <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                                <?= renderPagination($page, $totalPages) ?>
                             </div>
                         </div>
                     </div>

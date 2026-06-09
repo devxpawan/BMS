@@ -10,7 +10,7 @@ require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
 if (!isset($_GET['id'])) {
-    header("Location: " . BASE_URL . "modules/price-lists/price_list_list.php");
+    header("Location: " . BASE_URL . "modules/price-lists/price_list.php");
     exit();
 }
 
@@ -22,7 +22,7 @@ $result = $conn->query($sql);
 $price_list = $result->fetch_assoc();
 
 if (!$price_list) {
-    header("Location: " . BASE_URL . "modules/price-lists/price_list_list.php");
+    header("Location: " . BASE_URL . "modules/price-lists/price_list.php");
     exit();
 }
 
@@ -310,7 +310,7 @@ if (!empty($price_list['customer_id'])) {
                         <a href="<?= BASE_URL ?>modules/price-lists/view_price_list.php?id=<?= $id ?>" class="btn btn-outline-primary" target="_blank">
                             <i class="fas fa-eye me-1"></i> View Current
                         </a>
-                        <a href="<?= BASE_URL ?>modules/price-lists/price_list_list.php" class="btn btn-outline-secondary">
+                        <a href="<?= BASE_URL ?>modules/price-lists/price_list.php" class="btn btn-outline-secondary">
                             <i class="fas fa-list me-1"></i> View All
                         </a>
                     </div>
@@ -540,7 +540,7 @@ if (!empty($price_list['customer_id'])) {
                                     </div>
                                 </div>
                                 <div class="d-flex justify-content-end gap-2 pt-3">
-                                    <a href="<?= BASE_URL ?>modules/price-lists/price_list_list.php" class="btn btn-outline-secondary">Cancel</a>
+                                    <a href="<?= BASE_URL ?>modules/price-lists/price_list.php" class="btn btn-outline-secondary">Cancel</a>
                                     <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
                                         <i class="fas fa-save me-1"></i> Update Price List
                                     </button>

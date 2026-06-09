@@ -144,49 +144,65 @@ $current_user_role = isset($_SESSION['role_id']) ? $_SESSION['role_id'] : 0;
 // Check if user is admin (role_id = 1)
 $is_admin = ($current_user_role == 1);
 
-// Initialize search parameters
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 10;
+// Initialize filter parameters
+$filter_name = isset($_GET['filter_name']) ? trim($_GET['filter_name']) : '';
+$filter_email = isset($_GET['filter_email']) ? trim($_GET['filter_email']) : '';
+$filter_mobile = isset($_GET['filter_mobile']) ? trim($_GET['filter_mobile']) : '';
+$filter_role = isset($_GET['filter_role']) ? (int)$_GET['filter_role'] : 0;
+$filter_position = isset($_GET['filter_position']) ? (int)$_GET['filter_position'] : 0;
+$filter_status = isset($_GET['filter_status']) ? trim($_GET['filter_status']) : '';
+$limit = 10;
 $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Build search condition
-$searchCondition = "";
-if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " AND (u.id LIKE '%$searchTerm%' OR 
-                            u.name LIKE '%$searchTerm%' OR 
-                            u.email LIKE '%$searchTerm%' OR
-                            u.mobile LIKE '%$searchTerm%' OR
-                            r.name LIKE '%$searchTerm%' OR
-                            p.name LIKE '%$searchTerm%' OR
-                            u.status LIKE '%$searchTerm%')";
+// Build WHERE conditions
+$conditions = [];
+if (!empty($filter_name)) {
+    $s = $conn->real_escape_string($filter_name);
+    $conditions[] = "u.name LIKE '%$s%'";
+}
+if (!empty($filter_email)) {
+    $s = $conn->real_escape_string($filter_email);
+    $conditions[] = "u.email LIKE '%$s%'";
+}
+if (!empty($filter_mobile)) {
+    $s = $conn->real_escape_string($filter_mobile);
+    $conditions[] = "u.mobile LIKE '%$s%'";
+}
+if ($filter_role > 0) {
+    $conditions[] = "u.role_id = $filter_role";
+}
+if ($filter_position > 0) {
+    $conditions[] = "u.position_id = $filter_position";
+}
+if ($filter_status !== '') {
+    $s = $conn->real_escape_string($filter_status);
+    $conditions[] = "u.status = '$s'";
 }
 
-    // Modify SQL based on user role and search
-    if ($is_admin) {
-        // Admin can see all users
-        $sql = "SELECT u.*, r.name AS role_name, p.name AS position_name 
-                FROM users u 
-                JOIN roles r ON u.role_id = r.id 
-                LEFT JOIN positions p ON u.position_id = p.id 
-                WHERE 1=1 $searchCondition
-                ORDER BY u.id DESC 
-                LIMIT $limit OFFSET $offset";
-        
-        $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE 1=1 $searchCondition";
-    } else {
-        // Non-admin users can only see non-admin users
-        $sql = "SELECT u.*, r.name AS role_name, p.name AS position_name 
-                FROM users u 
-                JOIN roles r ON u.role_id = r.id 
-                LEFT JOIN positions p ON u.position_id = p.id 
-                WHERE u.role_id != 1 $searchCondition
-                ORDER BY u.id DESC 
-                LIMIT $limit OFFSET $offset";
-                
-        $countQuery = "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE u.role_id != 1 $searchCondition";
-    }
+$whereConditions = '';
+if (!empty($conditions)) {
+    $whereConditions = ' AND ' . implode(' AND ', $conditions);
+}
+
+// Fetch roles and positions for filter dropdowns
+$rolesResult = $conn->query("SELECT id, name FROM roles ORDER BY name");
+$positionsResult = $conn->query("SELECT id, name FROM positions ORDER BY name");
+
+// Build base query parts
+$baseFrom = "FROM users u JOIN roles r ON u.role_id = r.id LEFT JOIN positions p ON u.position_id = p.id";
+$selectCols = "u.*, r.name AS role_name, p.name AS position_name";
+
+if ($is_admin) {
+    $baseWhere = "1=1";
+} else {
+    $baseWhere = "u.role_id != 1";
+}
+
+$whereClause = $baseWhere . $whereConditions;
+
+$countQuery = "SELECT COUNT(*) as total $baseFrom WHERE $whereClause";
+$sql = "SELECT $selectCols $baseFrom WHERE $whereClause ORDER BY u.id DESC LIMIT $limit OFFSET $offset";
 
 // Execute queries
 $countResult = $conn->query($countQuery);
@@ -225,46 +241,69 @@ $result = $conn->query($sql);
                     <div class="card invoice-card mb-4">
                         <div class="card-body">
                             <!-- Filter Bar -->
-                            <div class="invoice-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4"
-                                            placeholder=" Search by name, email, role..."
-                                            value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="invoice-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Name</label>
+                                            <input type="text" name="filter_name" class="form-control" placeholder="User Name"
+                                                value="<?= htmlspecialchars($filter_name) ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Email</label>
+                                            <input type="text" name="filter_email" class="form-control" placeholder="Email"
+                                                value="<?= htmlspecialchars($filter_email) ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Phone</label>
+                                            <input type="text" name="filter_mobile" class="form-control" placeholder="Phone Number"
+                                                value="<?= htmlspecialchars($filter_mobile) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Role</label>
+                                            <select name="filter_role" class="form-select">
+                                                <option value="0">All</option>
+                                                <?php if ($rolesResult): while ($role = $rolesResult->fetch_assoc()): ?>
+                                                    <option value="<?= $role['id'] ?>" <?= $filter_role == $role['id'] ? 'selected' : '' ?>><?= htmlspecialchars($role['name']) ?></option>
+                                                <?php endwhile; endif; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Position</label>
+                                            <select name="filter_position" class="form-select">
+                                                <option value="0">All</option>
+                                                <?php if ($positionsResult): while ($position = $positionsResult->fetch_assoc()): ?>
+                                                    <option value="<?= $position['id'] ?>" <?= $filter_position == $position['id'] ? 'selected' : '' ?>><?= htmlspecialchars($position['name']) ?></option>
+                                                <?php endwhile; endif; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Status</label>
+                                            <select name="filter_status" class="form-select">
+                                                <option value="">All</option>
+                                                <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>>Active</option>
+                                                <option value="inactive" <?= $filter_status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/users/users.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter">
-                                        <i class="fas fa-search me-1"></i> Search
-                                    </button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/users/users.php" class="btn btn-outline-secondary btn-clear">
-                                            <i class="fas fa-times me-1"></i> Clear
-                                        </a>
-                                    <?php endif; ?>
-                                    <input type="hidden" name="limit" value="<?php echo $limit; ?>">
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <form method="get" id="limitForm" class="d-flex align-items-center gap-2">
-                                    <?php if (!empty($search)): ?>
-                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="page" value="1">
-                                    <span class="entries-label">Show</span>
-                                    <select name="limit" class="form-select"
-                                        style="width: 80px;"
-                                        onchange="document.getElementById('limitForm').submit()">
-                                        <option value="10" <?php if ($limit == 10) echo 'selected'; ?>>10</option>
-                                        <option value="25" <?php if ($limit == 25) echo 'selected'; ?>>25</option>
-                                        <option value="50" <?php if ($limit == 50) echo 'selected'; ?>>50</option>
-                                        <option value="100" <?php if ($limit == 100) echo 'selected'; ?>>100</option>
-                                    </select>
-                                    <span class="entries-label">entries</span>
-                                </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($filter_name) || !empty($filter_email) || !empty($filter_mobile) || $filter_role > 0 || $filter_position > 0 || $filter_status !== ''): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> User<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
-
-                            <?php if (!empty($search)): ?>
-                                <div class="search-count"><?php echo $totalRows; ?> Users<?= $totalRows !== 1 ? 's' : '' ?></div>
-                            <?php endif; ?>
 
                             <div class="table-responsive">
                                 <table class="table table-users" id="users_table">
@@ -304,7 +343,7 @@ $result = $conn->query($sql);
                                                         <?php if ($row['status'] == 'active'): ?>
                                                             <span class="user-status-badge badge-soft badge-soft-success">Active</span>
                                                         <?php else: ?>
-                                                            <span class="user-status-badge badge-soft badge-soft-secondary">Inactive</span>
+                                                            <span class="user-status-badge badge-soft badge-soft-danger">Inactive</span>
                                                         <?php endif; ?>
                                                     </td>
                                                     <td>
@@ -364,61 +403,7 @@ $result = $conn->query($sql);
                                         Showing <strong>0</strong> to <strong>0</strong> of <strong>0</strong> entries
                                     <?php endif; ?>
                                 </div>
-                                <nav aria-label="Page navigation">
-                                    <ul class="pagination mb-0">
-                                        <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-left"></i>
-                                            </a>
-                                        </li>
-
-                                        <?php
-                                        // Display a limited number of page links
-                                        $maxPagesToShow = 5;
-                                        $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
-                                        $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-
-                                        // Show "..." before the first page link if needed
-                                        if ($startPage > 1): ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=1&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">1</a>
-                                            </li>
-                                            <?php if ($startPage > 2): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-
-                                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                                            <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                                <a class="page-link"
-                                                    href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                            </li>
-                                        <?php endfor; ?>
-
-                                        <?php 
-                                        // Show "..." after the last page link if needed
-                                        if ($endPage < $totalPages): ?>
-                                            <?php if ($endPage < $totalPages - 1): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=<?php echo $totalPages; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $totalPages; ?></a>
-                                            </li>
-                                        <?php endif; ?>
-
-                                        <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                                <?= renderPagination($page, $totalPages) ?>
                             </div>
                         </div>
                     </div>
@@ -494,7 +479,7 @@ $result = $conn->query($sql);
                             <p class="detail-value">
                                 ${userData.status === 'active' 
                                     ? '<span class="badge-soft badge-soft-success">Active</span>' 
-                                    : '<span class="badge-soft badge-soft-secondary">Inactive</span>'}
+                                    : '<span class="badge-soft badge-soft-danger">Inactive</span>'}
                             </p>
                         </div>
                         <div class="detail-card">
@@ -573,7 +558,7 @@ $result = $conn->query($sql);
                                 const toggleButton = userRow.querySelector('.toggle-status-btn');
 
                                 if (newStatus === 'active') {
-                                    statusBadge.classList.remove('badge-soft-secondary');
+                                    statusBadge.classList.remove('badge-soft-danger');
                                     statusBadge.classList.add('badge-soft-success');
                                     statusBadge.textContent = 'Active';
                                     toggleButton.classList.remove('btn-activate');
@@ -582,7 +567,7 @@ $result = $conn->query($sql);
                                     toggleButton.setAttribute('title', 'Deactivate');
                                 } else {
                                     statusBadge.classList.remove('badge-soft-success');
-                                    statusBadge.classList.add('badge-soft-secondary');
+                                    statusBadge.classList.add('badge-soft-danger');
                                     statusBadge.textContent = 'Inactive';
                                     toggleButton.classList.remove('btn-deactivate');
                                     toggleButton.classList.add('btn-activate');

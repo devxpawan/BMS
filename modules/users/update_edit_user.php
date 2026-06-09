@@ -40,7 +40,7 @@ if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['c
 }
 
 // Basic validation of required fields
-$required_fields = ['name', 'email', 'status', 'role_id', 'user_id'];
+$required_fields = ['name', 'email', 'role_id', 'user_id'];
 foreach ($required_fields as $field) {
     if (!isset($_POST[$field]) || empty(trim($_POST[$field]))) {
         $_SESSION['error_message'] = ucfirst($field) . " is required.";
@@ -53,7 +53,6 @@ foreach ($required_fields as $field) {
 $user_id = intval($_POST['user_id']);
 $name = trim($_POST['name']);
 $email = filter_var(trim($_POST['email']), FILTER_SANITIZE_EMAIL);
-$status = strtolower(trim($_POST['status']));
 $role_id = intval($_POST['role_id']);
 $mobile = isset($_POST['mobile']) ? trim($_POST['mobile']) : '';
 $nic = isset($_POST['nic']) ? trim($_POST['nic']) : '';
@@ -82,20 +81,6 @@ if ($email_result->num_rows > 0) {
     exit();
 }
 $email_stmt->close();
-
-    // Validate status
-    if ($status !== 'active' && $status !== 'inactive') {
-        $_SESSION['error_message'] = "Invalid status value.";
-        header("Location: " . BASE_URL . "modules/users/users.php");
-        exit();
-    }
-
-    // Prevent self-deactivation: admin cannot deactivate their own account
-    if ($user_id == $_SESSION['user_id'] && $status === 'inactive') {
-        $_SESSION['error_message'] = "You cannot deactivate your own account.";
-        header("Location: " . BASE_URL . "modules/users/edit_user.php?id=" . $user_id);
-        exit();
-    }
 
     // Check if role exists
 $role_check_stmt = $conn->prepare("SELECT id FROM roles WHERE id = ?");
@@ -147,9 +132,6 @@ try {
     if (!empty($password)) {
         $changes[] = "Password was updated";
     }
-    if ($original_user['status'] !== $status) {
-        $changes[] = "Status changed from '{$original_user['status']}' to '{$status}'";
-    }
     if ($original_user['role_id'] != $role_id) {
         // Get role names for better logging
         $role_names_stmt = $conn->prepare("
@@ -197,21 +179,21 @@ try {
         // Update with new password and position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, password = ?, status = ?, role_id = ?, position_id = ?,
+            SET name = ?, email = ?, password = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("ssssiisssi", $name, $email, $hashed_password, $status, $role_id, 
+        $update_stmt->bind_param("sssiisssi", $name, $email, $hashed_password, $role_id, 
                                 $position_id, $mobile, $nic, $address, $user_id);
     } else {
         // Update without changing password, but with position_id
         $update_stmt = $conn->prepare("
             UPDATE users 
-            SET name = ?, email = ?, status = ?, role_id = ?, position_id = ?,
+            SET name = ?, email = ?, role_id = ?, position_id = ?,
                 mobile = ?, nic = ?, address = ?, updated_at = NOW() 
             WHERE id = ?
         ");
-        $update_stmt->bind_param("sssiisssi", $name, $email, $status, $role_id, $position_id, 
+        $update_stmt->bind_param("ssiisssi", $name, $email, $role_id, $position_id, 
                                 $mobile, $nic, $address, $user_id);
     }
     

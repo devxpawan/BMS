@@ -29,35 +29,46 @@ $error_message = isset($_SESSION['error_message']) ? $_SESSION['error_message'] 
 unset($_SESSION['success_message']);
 unset($_SESSION['error_message']);
 
-// Initialize search parameters
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+// Initialize filter parameters
+$filter_name = isset($_GET['filter_name']) ? trim($_GET['filter_name']) : '';
+$filter_business = isset($_GET['filter_business']) ? trim($_GET['filter_business']) : '';
+$filter_email = isset($_GET['filter_email']) ? trim($_GET['filter_email']) : '';
+$filter_phone = isset($_GET['filter_phone']) ? trim($_GET['filter_phone']) : '';
+$filter_status = isset($_GET['filter_status']) ? trim($_GET['filter_status']) : '';
+$limit = 10;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Build basic SQL query for counting total rows
-$countSql = "SELECT COUNT(*) as total FROM customers";
-
-// Build basic SQL query for fetching customers
-$sql = "SELECT * FROM customers";
-
-// Add search condition if search term is provided
-if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " WHERE (
-                        customer_id LIKE '%$searchTerm%' OR 
-                        business_name LIKE '%$searchTerm%' OR 
-                        name LIKE '%$searchTerm%' OR 
-                        email LIKE '%$searchTerm%' OR 
-                        phone LIKE '%$searchTerm%' OR 
-                        address LIKE '%$searchTerm%' OR
-                        status LIKE '%$searchTerm%')";
-    $countSql .= $searchCondition;
-    $sql .= $searchCondition;
+// Build WHERE conditions
+$conditions = [];
+if (!empty($filter_name)) {
+    $s = $conn->real_escape_string($filter_name);
+    $conditions[] = "name LIKE '%$s%'";
+}
+if (!empty($filter_business)) {
+    $s = $conn->real_escape_string($filter_business);
+    $conditions[] = "business_name LIKE '%$s%'";
+}
+if (!empty($filter_email)) {
+    $s = $conn->real_escape_string($filter_email);
+    $conditions[] = "email LIKE '%$s%'";
+}
+if (!empty($filter_phone)) {
+    $s = $conn->real_escape_string($filter_phone);
+    $conditions[] = "phone LIKE '%$s%'";
+}
+if ($filter_status !== '') {
+    $s = $conn->real_escape_string($filter_status);
+    $conditions[] = "status = '$s'";
+}
+$whereClause = '';
+if (!empty($conditions)) {
+    $whereClause = ' WHERE ' . implode(' AND ', $conditions);
 }
 
-// Add order by and pagination
-$sql .= " ORDER BY customer_id DESC LIMIT $limit OFFSET $offset";
+// Build SQL queries
+$countSql = "SELECT COUNT(*) as total FROM customers$whereClause";
+$sql = "SELECT * FROM customers$whereClause ORDER BY customer_id DESC LIMIT $limit OFFSET $offset";
 
 // Execute the count query
 $countResult = $conn->query($countSql);
@@ -103,43 +114,57 @@ $result = $conn->query($sql);
                     <div class="card invoice-card mb-4">
                         <div class="card-body">
                             <!-- Filter Bar -->
-                            <div class="invoice-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4"
-                                            placeholder=" Search by name, email, phone..."
-                                            value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="invoice-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Name</label>
+                                            <input type="text" name="filter_name" class="form-control" placeholder="Customer name"
+                                                value="<?= htmlspecialchars($filter_name) ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Business</label>
+                                            <input type="text" name="filter_business" class="form-control" placeholder="Business name"
+                                                value="<?= htmlspecialchars($filter_business) ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Email</label>
+                                            <input type="text" name="filter_email" class="form-control" placeholder="Email"
+                                                value="<?= htmlspecialchars($filter_email) ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Phone</label>
+                                            <input type="text" name="filter_phone" class="form-control" placeholder="Phone"
+                                                value="<?= htmlspecialchars($filter_phone) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Status</label>
+                                            <select name="filter_status" class="form-select">
+                                                <option value="">All</option>
+                                                <option value="Active" <?= $filter_status === 'Active' ? 'selected' : '' ?>>Active</option>
+                                                <option value="Inactive" <?= $filter_status === 'Inactive' ? 'selected' : '' ?>>Inactive</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/customers/customer_list.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter">
-                                        <i class="fas fa-search me-1"></i> Search
-                                    </button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/customers/customer_list.php" class="btn btn-outline-secondary btn-clear">
-                                            <i class="fas fa-times me-1"></i> Clear
-                                        </a>
-                                    <?php endif; ?>
-                                    <input type="hidden" name="limit" value="<?php echo $limit; ?>">
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <form method="get" id="limitForm" class="d-flex align-items-center gap-2">
-                                    <?php if (!empty($search)): ?>
-                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="page" value="1">
-                                    <span class="entries-label">Show</span>
-                                    <select name="limit" class="form-select" style="width: 80px;" onchange="document.getElementById('limitForm').submit()">
-                                        <option value="10" <?php if ($limit == 10) echo 'selected'; ?>>10</option>
-                                        <option value="25" <?php if ($limit == 25) echo 'selected'; ?>>25</option>
-                                        <option value="50" <?php if ($limit == 50) echo 'selected'; ?>>50</option>
-                                        <option value="100" <?php if ($limit == 100) echo 'selected'; ?>>100</option>
-                                    </select>
-                                    <span class="entries-label">entries</span>
-                                </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($filter_name) || !empty($filter_business) || !empty($filter_email) || !empty($filter_phone) || $filter_status !== ''): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> Customer<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+
+                                </div>
                             </div>
-                            <?php if (!empty($search)): ?>
-                                <div class="search-count"><?php echo $totalRows; ?> Customer<?= $totalRows !== 1 ? 's' : '' ?></div>
-                            <?php endif; ?>
 
                     <div class="table-responsive">
                              <table class="table table-invoice" id="customer_table">
@@ -168,11 +193,11 @@ $result = $conn->query($sql);
                                              <td><?= htmlspecialchars($row['phone']) ?></td>
                                              <td><?= htmlspecialchars($row['address']) ?></td>
                                              <td>
-                                                 <?php if ($row['status'] == 'Active'): ?>
-                                                     <span class="badge-soft badge-soft-success">Active</span>
-                                                 <?php else: ?>
-                                                      <span class="badge-soft badge-soft-danger">Inactive</span>
-                                                 <?php endif; ?>
+                                              <?php if ($row['status'] == 'Active'): ?>
+                                                      <span class="customer-status-badge badge-soft badge-soft-success">Active</span>
+                                                  <?php else: ?>
+                                                       <span class="customer-status-badge badge-soft badge-soft-danger">Inactive</span>
+                                                  <?php endif; ?>
                                              </td>
                                              <td>
                                                   <div class="action-btn-group d-flex gap-1">
@@ -219,54 +244,7 @@ $result = $conn->query($sql);
                                 <strong><?php echo min($offset + $limit, $totalRows); ?></strong> of <strong><?php echo $totalRows; ?></strong>
                                 entries
                             </div>
-                            <nav aria-label="Page navigation">
-                                <ul class="pagination mb-0">
-                                    <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                        <a class="page-link"
-                                            href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                            <i class="fas fa-chevron-left"></i>
-                                        </a>
-                                    </li>
-
-                                    <?php
-                                    $maxPagesToShow = 5;
-                                    $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
-                                    $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-
-                                    if ($startPage > 1): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=1&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">1</a>
-                                        </li>
-                                        <?php if ($startPage > 2): ?>
-                                            <li class="page-item disabled"><span class="page-link">...</span></li>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-
-                                    <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                                        <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                        </li>
-                                    <?php endfor; ?>
-
-                                    <?php if ($endPage < $totalPages): ?>
-                                        <?php if ($endPage < $totalPages - 1): ?>
-                                            <li class="page-item disabled"><span class="page-link">...</span></li>
-                                        <?php endif; ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $totalPages; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $totalPages; ?></a>
-                                        </li>
-                                    <?php endif; ?>
-
-                                    <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                        <a class="page-link"
-                                            href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                            <i class="fas fa-chevron-right"></i>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </nav>
-                        </div>
+                            <?= renderPagination($page, $totalPages) ?>
                     </div> <!-- card-body close -->
                 </div> <!-- card close -->
             </div> <!-- container-fluid close -->
@@ -416,15 +394,15 @@ $result = $conn->query($sql);
                                 if (data.new_status === 'Active') {
                                     statusBadge.classList.remove('badge-soft-danger');
                                     statusBadge.classList.add('badge-soft-success');
-                                    toggleButton.classList.remove('btn-activate');
-                                    toggleButton.classList.add('btn-deactivate');
+                                    toggleButton.classList.remove('btn-view');
+                                    toggleButton.classList.add('btn-cancel');
                                     toggleButton.innerHTML = '<i class="fas fa-ban"></i>';
                                     toggleButton.setAttribute('title', 'Deactivate');
                                 } else {
                                     statusBadge.classList.remove('badge-soft-success');
                                     statusBadge.classList.add('badge-soft-danger');
-                                    toggleButton.classList.remove('btn-deactivate');
-                                    toggleButton.classList.add('btn-activate');
+                                    toggleButton.classList.remove('btn-cancel');
+                                    toggleButton.classList.add('btn-view');
                                     toggleButton.innerHTML = '<i class="fas fa-check"></i>';
                                     toggleButton.setAttribute('title', 'Activate');
                                 }

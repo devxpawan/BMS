@@ -15,36 +15,45 @@ $current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0
 $canEditRecords = ($current_user_role === 1 || $current_user_role === 3);
 
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+$filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
+$filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
+$filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
+$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 15;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$countSql = "SELECT COUNT(*) as total FROM quotations q 
+$baseFrom = "FROM quotations q 
              LEFT JOIN customers c ON q.customer_id = c.customer_id
              LEFT JOIN users u ON q.created_by = u.id";
 
-$sql = "SELECT q.*, c.name as customer_name, c.business_name as customer_business_name, 
-               u.name as creator_name
-        FROM quotations q 
-        LEFT JOIN customers c ON q.customer_id = c.customer_id
-        LEFT JOIN users u ON q.created_by = u.id";
+$selectCols = "q.*, c.name as customer_name, c.business_name as customer_business_name, 
+               u.name as creator_name";
 
+$conditions = [];
 if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " WHERE (
-                        q.quotation_id LIKE '%$searchTerm%' OR
-                        q.ref_no LIKE '%$searchTerm%' OR
-                        c.name LIKE '%$searchTerm%' OR
-                        c.business_name LIKE '%$searchTerm%' OR
-                        q.quotation_date LIKE '%$searchTerm%' OR
-                        q.total_amount LIKE '%$searchTerm%' OR
-                        q.status LIKE '%$searchTerm%' OR
-                        u.name LIKE '%$searchTerm%')";
-    $countSql .= $searchCondition;
-    $sql .= $searchCondition;
+    $s = $conn->real_escape_string($search);
+    $conditions[] = "(q.quotation_id LIKE '%$s%' OR q.ref_no LIKE '%$s%')";
+}
+if (!empty($filter_from_date)) {
+    $d = $conn->real_escape_string($filter_from_date);
+    $conditions[] = "q.quotation_date >= '$d'";
+}
+if (!empty($filter_to_date)) {
+    $d = $conn->real_escape_string($filter_to_date);
+    $conditions[] = "q.quotation_date <= '$d'";
+}
+if (!empty($filter_customer)) {
+    $c = $conn->real_escape_string($filter_customer);
+    $conditions[] = "(c.name LIKE '%$c%' OR c.business_name LIKE '%$c%')";
 }
 
-$sql .= " ORDER BY q.quotation_id DESC LIMIT $limit OFFSET $offset";
+$whereClause = '';
+if (!empty($conditions)) {
+    $whereClause = ' WHERE ' . implode(' AND ', $conditions);
+}
+
+$countSql = "SELECT COUNT(*) as total $baseFrom $whereClause";
+$sql = "SELECT $selectCols $baseFrom $whereClause ORDER BY q.quotation_id DESC LIMIT $limit OFFSET $offset";
 
 $countResult = $conn->query($countSql);
 $totalRows = ($countResult && $countResult->num_rows > 0) ? $countResult->fetch_assoc()['total'] : 0;
@@ -79,17 +88,56 @@ $result = $conn->query($sql);
                     
                     <div class="card quotation-card">
                         <div class="card-body">
-                            <div class="quotation-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4" placeholder="Search quotations..." value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="quotation-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Search</label>
+                                            <input type="text" name="search" class="form-control" placeholder="Quotation ID or Ref No"
+                                                value="<?php echo htmlspecialchars($search); ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Customer</label>
+                                            <input type="text" name="filter_customer" class="form-control" placeholder="Name or business..."
+                                                value="<?= htmlspecialchars($filter_customer) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
+                                            <input type="date" name="filter_from_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_from_date) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">To Date</label>
+                                            <input type="date" name="filter_to_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_to_date) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/quotations/quotation_list.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter"><i class="fas fa-search me-1"></i> Search</button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/quotations/quotation_list.php" class="btn btn-outline-secondary btn-clear"><i class="fas fa-times me-1"></i> Clear</a>
-                                    <?php endif; ?>
+                                    <input type="hidden" name="page" value="1">
+                                    <input type="hidden" name="limit" value="<?= $limit ?>">
                                 </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($search) || !empty($filter_from_date) || !empty($filter_to_date) || !empty($filter_customer)): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> Quotation<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <form method="get" class="d-flex align-items-center gap-2">
+                                        <?php foreach (['search','filter_customer','filter_from_date','filter_to_date'] as $f):
+                                            if (!empty($$f)): ?>
+                                            <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
+                                        <?php endif; endforeach; ?>
+                                        <input type="hidden" name="page" value="1">
+                                        <input type="hidden" name="limit" value="<?= $limit ?>">
+                                    </form>
+                                </div>
                             </div>
                             
                             <div class="table-responsive">
@@ -159,21 +207,7 @@ $result = $conn->query($sql);
                                 <div class="entries-info">
                                     Showing <strong><?php echo ($offset + 1); ?></strong> to <strong><?php echo min($offset + $limit, $totalRows); ?></strong> of <strong><?php echo $totalRows; ?></strong> entries
                                 </div>
-                                <nav>
-                                    <ul class="pagination mb-0">
-                                        <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><i class="fas fa-chevron-left"></i></a>
-                                        </li>
-                                        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                            <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                                <a class="page-link" href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                            </li>
-                                        <?php endfor; ?>
-                                        <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><i class="fas fa-chevron-right"></i></a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                                <?= renderPagination($page, $totalPages) ?>
 </div>
                          </div>
                      </div>

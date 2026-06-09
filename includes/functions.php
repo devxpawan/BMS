@@ -113,6 +113,72 @@ function getCompanyInfo($conn) {
     return $defaults;
 }
 
+// Build a query string from $_GET params, excluding specified keys and empty values
+function buildQueryString($exclude = [], $extra = []) {
+    $parts = [];
+    foreach ($_GET as $key => $value) {
+        if (!in_array($key, $exclude) && $value !== '' && $value !== null) {
+            $parts[] = urlencode($key) . '=' . urlencode($value);
+        }
+    }
+    foreach ($extra as $key => $value) {
+        if ($value !== '' && $value !== null) {
+            $parts[] = urlencode($key) . '=' . urlencode($value);
+        }
+    }
+    return implode('&', $parts);
+}
+
+// Render pagination HTML
+function renderPagination($page, $totalPages, $search = '') {
+    if ($totalPages <= 1) return '';
+    $html = '<nav aria-label="Page navigation"><ul class="pagination mb-0">';
+    
+    // Previous
+    $prevDisabled = $page <= 1 ? 'disabled' : '';
+    $html .= '<li class="page-item ' . $prevDisabled . '">
+        <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $page - 1]) . '">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+    </li>';
+    
+    $maxPagesToShow = 5;
+    $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
+    $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
+    
+    if ($startPage > 1) {
+        $html .= '<li class="page-item"><a class="page-link" href="?' . buildQueryString(['page'], ['page' => 1]) . '">1</a></li>';
+        if ($startPage > 2) {
+            $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+    }
+    
+    for ($i = $startPage; $i <= $endPage; $i++) {
+        $active = $page == $i ? 'active' : '';
+        $html .= '<li class="page-item ' . $active . '">
+            <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $i]) . '">' . $i . '</a>
+        </li>';
+    }
+    
+    if ($endPage < $totalPages) {
+        if ($endPage < $totalPages - 1) {
+            $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+        $html .= '<li class="page-item"><a class="page-link" href="?' . buildQueryString(['page'], ['page' => $totalPages]) . '">' . $totalPages . '</a></li>';
+    }
+    
+    // Next
+    $nextDisabled = $page >= $totalPages ? 'disabled' : '';
+    $html .= '<li class="page-item ' . $nextDisabled . '">
+        <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $page + 1]) . '">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+    </li>';
+    
+    $html .= '</ul></nav>';
+    return $html;
+}
+
 // Generate a reference number based on company initials, type, year, and id
 // Example: ABC/QT/26/001
 function generateRefNo($conn, $id, $date, $type = 'QT') {

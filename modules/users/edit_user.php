@@ -67,7 +67,6 @@ if (!isset($_SESSION['csrf_token'])) {
     $mobile = isset($_GET['mobile']) ? urldecode($_GET['mobile']) : $user['mobile'];
     $nic = isset($_GET['nic']) ? urldecode($_GET['nic']) : $user['nic'];
     $address = isset($_GET['address']) ? urldecode($_GET['address']) : $user['address'];
-    $status = isset($_GET['status']) ? $_GET['status'] : $user['status'];
     $role_id = isset($_GET['role_id']) ? $_GET['role_id'] : $user['role_id'];
     $position_id = isset($_GET['position_id']) ? $_GET['position_id'] : ($user['position_id'] ?? '');
 
@@ -216,21 +215,6 @@ if (!isset($_SESSION['csrf_token'])) {
                                             <label for="address" class="form-label">Address</label>
                                             <textarea class="form-control" id="address" name="address"
                                                 placeholder="Enter Full Address" rows="3" data-original="<?php echo htmlspecialchars($address); ?>"><?php echo htmlspecialchars($address); ?></textarea>
-                                        </div>
-
-                                        <!-- Status Field -->
-                                        <div class="mb-3">
-                                            <label for="status" class="form-label">Status</label>
-                                            <?php if ($is_editing_self): ?>
-                                                <input type="hidden" name="status" value="<?php echo htmlspecialchars($status); ?>">
-                                            <?php endif; ?>
-                                            <select class="form-select" id="status" name="status" <?php echo $is_editing_self ? 'disabled' : 'required'; ?> data-original="<?php echo htmlspecialchars(strtolower($status)); ?>">
-                                                <option value="active" <?php echo (strtolower($status) == 'active') ? 'selected' : ''; ?>>Active</option>
-                                                <option value="inactive" <?php echo (strtolower($status) == 'inactive') ? 'selected' : ''; ?>>Inactive</option>
-                                            </select>
-                                            <?php if ($is_editing_self): ?>
-                                                <div class="form-text text-muted">Cannot change your own status.</div>
-                                            <?php endif; ?>
                                         </div>
 
                                         <!-- Role Field - Dynamically Populated -->
@@ -751,7 +735,7 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
     }
 
     // Check if any field has changed
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id'];
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -773,7 +757,7 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
 
 // Enable/disable submit button based on whether any field changed
 function checkForChanges() {
-    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id'];
+    const fields = ['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
     for (const id of fields) {
         const el = document.getElementById(id);
@@ -790,7 +774,7 @@ function checkForChanges() {
 }
 
 // Attach listeners to all tracked fields
-['name', 'email', 'mobile', 'nic', 'address', 'status', 'role_id', 'position_id', 'password'].forEach(function(id) {
+['name', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id', 'password'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
         el.addEventListener('input', checkForChanges);

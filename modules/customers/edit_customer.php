@@ -25,6 +25,7 @@ if (!isset($_SESSION['role_id']) || !in_array($_SESSION['role_id'], [1, 3])) {
 
 // Include the database connection file
 require_once BASE_PATH . 'includes/db_connection.php';
+require_once BASE_PATH . 'includes/functions.php';
 
 // Function to generate CSRF token
 function generateCSRFToken() {
@@ -231,8 +232,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
          $phone = trim($_POST['phone']);
          $address = trim($_POST['address']);
          $business_name = trim($_POST['business_name']);
-         $status = $_POST['status'];
-
         // Enhanced validation checks
         if (empty($name)) {
             $errorMsg = "Name cannot be empty.";
@@ -305,8 +304,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                      $originalPhone = $customer['phone'];
                      $originalAddress = $customer['address'];
                      $originalBusinessName = $customer['business_name'];
-                     $originalStatus = $customer['status'];
-
                      // Track changes in a structured format for the database
                     $changeDetails = array();
                     $changedFields = array(); // For the log message
@@ -336,18 +333,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $changeDetails['address'] = array('old' => $originalAddress, 'new' => $address);
                     }
 
-                    if ($status !== $originalStatus) {
-                        $changedFields[] = "status: '$originalStatus' → '$status'";
-                        $changeDetails['status'] = array('old' => $originalStatus, 'new' => $status);
-                    }
-
                     // Generate activity log details
                     $changes = !empty($changedFields) ? " Changes: " . implode(", ", $changedFields) : "";
                     $activityDetails = "Customer ID #$customer_id ($name) was updated by user ID #{$_SESSION['user_id']}.{$changes}";
 
                       // Prepare SQL statement to prevent SQL injection
-                      $stmt = $conn->prepare("UPDATE customers SET name = ?, email = ?, phone = ?, address = ?, business_name = ?, status = ? WHERE customer_id = ?");
-                      $stmt->bind_param("ssssssi", $name, $email, $phone, $address, $business_name, $status, $customer_id);
+                      $stmt = $conn->prepare("UPDATE customers SET name = ?, email = ?, phone = ?, address = ?, business_name = ? WHERE customer_id = ?");
+                      $stmt->bind_param("sssssi", $name, $email, $phone, $address, $business_name, $customer_id);
 
                     // Execute the statement
                     if ($stmt->execute()) {
@@ -431,7 +423,6 @@ $email = isset($_POST['email']) ? htmlspecialchars($_POST['email']) : htmlspecia
 $phone = isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : htmlspecialchars($customer['phone']);
 $address = isset($_POST['address']) ? htmlspecialchars($_POST['address']) : htmlspecialchars($customer['address']);
 $business_name = isset($_POST['business_name']) ? htmlspecialchars($_POST['business_name']) : htmlspecialchars($customer['business_name']);
-$status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
 ?>
 
 <!DOCTYPE html>
@@ -582,17 +573,15 @@ $status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
 
                 <div class="card" style="margin: 0 32px; border: 1px solid #eaecf0; border-radius: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); background: #fff;">
                     <div class="card-body" style="padding: 28px 32px;">
-                        <div class="premium-form-container">
                             <form method="POST" action="<?= BASE_URL ?>modules/customers/edit_customer.php?id=<?php echo $customer_id; ?>" id="editCustomerForm" novalidate>
                                 <!-- CSRF Token -->
                                 <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                                 <input type="hidden" name="customer_id" value="<?php echo $customer_id; ?>">
                                 
                                 <div class="row">
-                                    <!-- Customer Details Section -->
                                     <div class="col-md-6">
                                         <div class="premium-section-header">
-                                            <i class="fas fa-id-card"></i> Customer Details
+                                            <i class="fas fa-id-card me-2"></i> Customer Details
                                         </div>
 
                                         <!-- Business Name Field -->
@@ -618,6 +607,12 @@ $status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
                                                 placeholder="name@example.com" value="<?php echo $email; ?>" data-original="<?php echo $email; ?>">
                                             <div class="error-feedback" id="email-error"></div>
                                         </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="premium-section-header">
+                                            <i class="fas fa-address-book me-2"></i> Contact Details
+                                        </div>
 
                                         <!-- Phone Field -->
                                         <div class="mb-3">
@@ -626,14 +621,7 @@ $status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
                                                  placeholder="Enter 10-digit phone number" value="<?php echo $phone; ?>" data-original="<?php echo $phone; ?>" required>
                                             <div class="error-feedback" id="phone-error"></div>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- Configuration Details Section -->
-                                    <div class="col-md-6">
-                                        <div class="premium-section-header">
-                                            <i class="fas fa-cog"></i> Configuration Details
-                                        </div>
-                                        
+
                                         <!-- Address Field -->
                                         <div class="mb-3">
                                             <label for="address" class="form-label">Address</label>
@@ -641,22 +629,13 @@ $status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
                                                 placeholder="Address" required rows="3" data-original="<?php echo $address; ?>"><?php echo $address; ?></textarea>
                                             <div class="error-feedback" id="address-error"></div>
                                         </div>
-
-                                        <!-- Status Field -->
-                                        <div class="mb-3">
-                                            <label for="status" class="form-label">Status</label>
-                                            <select class="form-select" id="status" name="status" required data-original="<?php echo $status; ?>">
-                                                <option value="Active" <?php echo ($status == 'Active') ? 'selected' : ''; ?>>Active</option>
-                                                <option value="Inactive" <?php echo ($status == 'Inactive') ? 'selected' : ''; ?>>Inactive</option>
-                                            </select>
-                                        </div>
                                     </div>
                                 </div>
                                 
                                 <!-- Submit Button -->
                                 <div class="row mt-4 pt-3 border-top">
                                     <div class="col-12 d-flex justify-content-end gap-3">
-                                        <a href="<?= BASE_URL ?>modules/customers/customer_list.php" class="back-btn text-decoration-none">
+                                        <a href="<?= BASE_URL ?>modules/customers/customer_list.php" class="back-btn text-decoration-none d-flex align-items-center">
                                             <i class="fas fa-arrow-left me-2"></i> Cancel
                                         </a>
                                         <button type="submit" class="save-btn" id="submitBtn" disabled>
@@ -665,7 +644,6 @@ $status = isset($_POST['status']) ? $_POST['status'] : $customer['status'];
                                     </div>
                                 </div>
                             </form>
-                        </div>
                     </div>
                 </div>
                 
@@ -1111,7 +1089,7 @@ console.log(validatePhone('+947296668'));   // Should be invalid (international 
         }
 
         // Check if any field has changed
-        const fields = ['business_name', 'name', 'email', 'phone', 'address', 'status'];
+        const fields = ['business_name', 'name', 'email', 'phone', 'address'];
         let hasChanged = false;
         for (const id of fields) {
             const el = document.getElementById(id);
@@ -1127,7 +1105,7 @@ console.log(validatePhone('+947296668'));   // Should be invalid (international 
 
     // Enable/disable submit button based on whether any field changed
     function checkForChanges() {
-        const fields = ['business_name', 'name', 'email', 'phone', 'address', 'status'];
+        const fields = ['business_name', 'name', 'email', 'phone', 'address'];
         let hasChanged = false;
         for (const id of fields) {
             const el = document.getElementById(id);
@@ -1140,7 +1118,7 @@ console.log(validatePhone('+947296668'));   // Should be invalid (international 
     }
 
     // Attach listeners to static fields
-    ['business_name', 'name', 'email', 'phone', 'address', 'status'].forEach(function(id) {
+    ['business_name', 'name', 'email', 'phone', 'address'].forEach(function(id) {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('input', checkForChanges);

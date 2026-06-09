@@ -58,6 +58,104 @@ while ($positionRow = $positionResult->fetch_assoc()) {
 }
 ?>
 
+<?php
+// Handle form submission (self-posting)
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    try {
+        // Validate CSRF Token
+        if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+            throw new Exception("Security token validation failed. Please refresh the page and try again.");
+        }
+        unset($_SESSION['csrf_token']);
+
+        // Sanitize and validate inputs
+        $name = trim(filter_input(INPUT_POST, 'name', FILTER_SANITIZE_SPECIAL_CHARS));
+        $email = trim(filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL));
+        $mobile = trim(filter_input(INPUT_POST, 'mobile', FILTER_SANITIZE_SPECIAL_CHARS));
+        $nic = trim(filter_input(INPUT_POST, 'nic', FILTER_SANITIZE_SPECIAL_CHARS));
+        $address = trim(filter_input(INPUT_POST, 'address', FILTER_SANITIZE_SPECIAL_CHARS));
+        $status = 'active';
+        $role_id = filter_input(INPUT_POST, 'role_id', FILTER_VALIDATE_INT) ?: 0;
+        $position_id = filter_input(INPUT_POST, 'position_id', FILTER_VALIDATE_INT) ?: null;
+        if (empty($position_id)) $position_id = null;
+
+        // Input validation
+        $errors = [];
+        if (empty($name)) {
+            $errors[] = "Name is required.";
+        }
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email address.";
+        }
+        if (!empty($mobile) && !preg_match('/^[0-9]{10}$/', $mobile)) {
+            $errors[] = "Invalid mobile number.";
+        }
+        if (empty($role_id)) {
+            $errors[] = "Role selection is required.";
+        }
+
+        // Password handling
+        $password = $_POST['password'] ?? null;
+        if (!empty($password)) {
+            if (strlen($password) < 8) {
+                $errors[] = "Password must be at least 8 characters long.";
+            }
+        }
+
+        // Check for duplicate email
+        $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows > 0) {
+            $errors[] = "Email already in use.";
+        }
+        $stmt->close();
+
+        if (!empty($errors)) {
+            $errorMsg = implode("<br>", $errors);
+        } else {
+            $conn->begin_transaction();
+            if (!empty($password)) {
+                $hashed_password = password_hash($password, PASSWORD_BCRYPT);
+                $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("ssssssiss",
+                    $name, $email, $mobile, $nic, $address,
+                    $status, $role_id, $position_id, $hashed_password
+                );
+            } else {
+                $stmt = $conn->prepare("INSERT INTO users (name, email, mobile, nic, address, status, role_id, position_id, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("ssssssii",
+                    $name, $email, $mobile, $nic, $address,
+                    $status, $role_id, $position_id
+                );
+            }
+
+            if ($stmt->execute()) {
+                $conn->commit();
+                $_SESSION['success_message'] = "User added successfully.";
+                header("Location: " . BASE_URL . "modules/users/add_user.php");
+                exit();
+            } else {
+                $conn->rollback();
+                $errorMsg = "Failed to add user.";
+            }
+            $stmt->close();
+        }
+    } catch (Exception $e) {
+        $errorMsg = $e->getMessage();
+    }
+}
+
+// Read success message from session (PRG pattern)
+if (isset($_SESSION['success_message'])) {
+    $successMsg = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -105,7 +203,7 @@ while ($positionRow = $positionResult->fetch_assoc()) {
                   
                 <div class="card" style="margin: 0 32px; border: 1px solid #eaecf0; border-radius: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); background: #fff;">
                     <div class="card-body" style="padding: 28px 32px;">
-                        <form method="POST" action="<?= BASE_URL ?>modules/users/update_user.php" id="addUserForm" novalidate>
+                        <form method="POST" action="<?= BASE_URL ?>modules/users/add_user.php" id="addUserForm" novalidate>
                             <!-- CSRF Token -->
                             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             
@@ -176,15 +274,6 @@ while ($positionRow = $positionResult->fetch_assoc()) {
                                             <div class="error-feedback" id="address-error"></div>
                                         </div>
 
-                                        <!-- Status Field -->
-                                        <div class="mb-3">
-                                            <label for="status" class="form-label">Status</label>
-                                            <select class="form-select" id="status" name="status" required>
-                                                <option value="active">Active</option>
-                                                <option value="inactive">Inactive</option>
-                                            </select>
-                                        </div>
-
                                         <!-- Role Field - Dynamically Populated -->
                                         <div class="mb-3">
                                             <label for="role_id" class="form-label">Role</label>
@@ -242,12 +331,6 @@ while ($positionRow = $positionResult->fetch_assoc()) {
     <script>
     // Initialize Select2
     $(document).ready(function() {
-        $('#status').select2({
-            theme: 'bootstrap-5',
-            width: '100%',
-            minimumResultsForSearch: Infinity
-        });
-
         $('#role_id').select2({
             theme: 'bootstrap-5',
             width: '100%',

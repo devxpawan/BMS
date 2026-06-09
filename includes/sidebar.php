@@ -564,7 +564,7 @@ require_once __DIR__ . '/../config/paths.php';
                 <div class="collapse" id="collapsePriceLists" data-bs-parent="#sidenavAccordion">
                     <nav class="sb-sidenav-menu-nested nav">
                         <a class="nav-link" href="<?= BASE_URL ?>modules/price-lists/price_list_create.php" id="create-price-list-link">Create Price List</a>
-                        <a class="nav-link" href="<?= BASE_URL ?>modules/price-lists/price_list_list.php" id="all-price-lists-link">All Price Lists</a>
+                        <a class="nav-link" href="<?= BASE_URL ?>modules/price-lists/price_list.php" id="all-price-lists-link">All Price Lists</a>
                         <a class="nav-link" href="<?= BASE_URL ?>modules/price-lists/manage_assets.php" id="manage-assets-link">Manage Assets</a>
                     </nav>
                 </div>

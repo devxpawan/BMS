@@ -237,6 +237,16 @@
     box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);
 }
 
+.action-btn-group .btn-edit { color: #f59e0b; }
+
+.action-btn-group .btn-edit:hover {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #d97706;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+}
+
 .action-btn-group .btn-cancel { color: #f04438; }
 
 .action-btn-group .btn-cancel:hover {

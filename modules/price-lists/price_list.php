@@ -9,20 +9,43 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
-// Pagination and Search
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 10;
+// Initialize filter parameters
+$filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
+$filter_currency = isset($_GET['filter_currency']) ? trim($_GET['filter_currency']) : '';
+$filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
+$filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
+$limit = 10;
 $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$searchCondition = "";
-if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " WHERE pl.id LIKE '%$searchTerm%'";
+// Build WHERE conditions
+$conditions = [];
+if (!empty($filter_customer)) {
+    $s = $conn->real_escape_string($filter_customer);
+    $conditions[] = "c.name LIKE '%$s%'";
+}
+if ($filter_currency !== '') {
+    $s = $conn->real_escape_string($filter_currency);
+    $conditions[] = "pl.currency = '$s'";
+}
+if (!empty($filter_from_date)) {
+    $d = $conn->real_escape_string($filter_from_date);
+    $conditions[] = "pl.price_list_date >= '$d'";
+}
+if (!empty($filter_to_date)) {
+    $d = $conn->real_escape_string($filter_to_date);
+    $conditions[] = "pl.price_list_date <= '$d'";
+}
+$whereClause = '';
+if (!empty($conditions)) {
+    $whereClause = ' WHERE ' . implode(' AND ', $conditions);
 }
 
+// Fetch distinct currencies for filter dropdown
+$currenciesResult = $conn->query("SELECT DISTINCT currency FROM price_lists ORDER BY currency");
+
 // Count total price lists
-$countSql = "SELECT COUNT(*) as total FROM price_lists pl $searchCondition";
+$countSql = "SELECT COUNT(*) as total FROM price_lists pl LEFT JOIN customers c ON pl.customer_id = c.customer_id$whereClause";
 $countResult = $conn->query($countSql);
 $totalRows = ($countResult && $countResult->num_rows > 0) ? $countResult->fetch_assoc()['total'] : 0;
 $totalPages = ceil($totalRows / $limit);
@@ -31,7 +54,7 @@ $totalPages = ceil($totalRows / $limit);
 $sql = "SELECT pl.*, c.name as customer_name 
         FROM price_lists pl 
         LEFT JOIN customers c ON pl.customer_id = c.customer_id 
-        $searchCondition 
+        $whereClause 
         ORDER BY pl.id DESC 
         LIMIT $limit OFFSET $offset";
 $result = $conn->query($sql);
@@ -88,34 +111,52 @@ $result = $conn->query($sql);
                     <div class="card invoice-card">
                         <div class="card-body">
                             <!-- Filter Bar -->
-                            <div class="invoice-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4" placeholder="Search price lists by ID..." value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="invoice-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Customer</label>
+                                            <input type="text" name="filter_customer" class="form-control" placeholder="Customer name"
+                                                value="<?= htmlspecialchars($filter_customer) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Currency</label>
+                                            <select name="filter_currency" class="form-select">
+                                                <option value="">All</option>
+                                                <?php if ($currenciesResult): while ($cur = $currenciesResult->fetch_assoc()): ?>
+                                                    <option value="<?= htmlspecialchars($cur['currency']) ?>" <?= $filter_currency === $cur['currency'] ? 'selected' : '' ?>><?= strtoupper(htmlspecialchars($cur['currency'])) ?></option>
+                                                <?php endwhile; endif; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
+                                            <input type="date" name="filter_from_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_from_date) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">To Date</label>
+                                            <input type="date" name="filter_to_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_to_date) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/price-lists/price_list.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter"><i class="fas fa-search me-1"></i> Search</button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/price-lists/price_list_list.php" class="btn btn-outline-secondary btn-clear"><i class="fas fa-times me-1"></i> Clear</a>
-                                    <?php endif; ?>
+                                    <input type="hidden" name="page" value="1">
                                 </form>
-                                <form method="get" class="d-flex align-items-center gap-2">
-                                    <span class="entries-label">Show</span>
-                                    <select name="limit" class="form-select" style="width: 80px;" onchange="this.form.submit()">
-                                        <option value="10" <?php if ($limit == 10) echo 'selected'; ?>>10</option>
-                                        <option value="25" <?php if ($limit == 25) echo 'selected'; ?>>25</option>
-                                        <option value="50" <?php if ($limit == 50) echo 'selected'; ?>>50</option>
-                                    </select>
-                                    <span class="entries-label">entries</span>
-                                    <?php if (!empty($search)): ?>
-                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                                    <?php endif; ?>
-                                </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($filter_customer) || $filter_currency !== '' || !empty($filter_from_date) || !empty($filter_to_date)): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> Price List<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
-
-                            <?php if (!empty($search)): ?>
-                                <div class="search-count"><?php echo $totalRows; ?> Price Lists<?= $totalRows !== 1 ? 's' : '' ?></div>
-                            <?php endif; ?>
 
                             <div class="table-responsive">
                                 <table class="table table-invoice align-middle mb-0">
@@ -170,25 +211,7 @@ $result = $conn->query($sql);
                                 <div class="entries-info">
                                     Showing <strong><?= ($offset + 1) ?></strong> to <strong><?= min($offset + $limit, $totalRows) ?></strong> of <strong><?= $totalRows ?></strong> entries
                                 </div>
-<nav aria-label="Page navigation">
-                                    <ul class="pagination mb-0">
-                                        <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-left"></i>
-                                            </a>
-                                        </li>
-                                        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                            <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                                <a class="page-link" href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                            </li>
-                                        <?php endfor; ?>
-                                        <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                                <?= renderPagination($page, $totalPages) ?>
                             </div>
                         </div>
                     </div>

@@ -271,7 +271,7 @@ $customerResult = $conn->query($customerSql);
                         <h5>Create Price List</h5>
                         <p class="text-muted">Configure asset pricing and generate a new price list</p>
                     </div>
-                    <a href="<?= BASE_URL ?>modules/price-lists/price_list_list.php" class="btn btn-outline-secondary">
+                    <a href="<?= BASE_URL ?>modules/price-lists/price_list.php" class="btn btn-outline-secondary">
                         <i class="fas fa-list me-1"></i> View All
                     </a>
                 </div>

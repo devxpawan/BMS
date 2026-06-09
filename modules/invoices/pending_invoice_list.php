@@ -83,31 +83,16 @@ if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
         $_SESSION['message_type'] = "danger";
     }
     
-    // Build the redirect URL
+    // Build the redirect URL preserving filter params
     $redirect_url = "pending_invoice_list.php";
-    
-    // Add search parameter if it exists
-    if (isset($_POST['search']) && !empty($_POST['search'])) {
-        $redirect_url .= "?search=" . urlencode($_POST['search']);
-        
-        // Add limit and page if they exist
-        if (isset($_POST['limit']) && !empty($_POST['limit'])) {
-            $redirect_url .= "&limit=" . (int)$_POST['limit'];
+    $qp = [];
+    foreach (['search','filter_pay_status','filter_from_date','filter_to_date','filter_customer','page'] as $f) {
+        if (isset($_POST[$f]) && $_POST[$f] !== '') {
+            $qp[] = urlencode($f) . '=' . urlencode($_POST[$f]);
         }
-        if (isset($_POST['page']) && !empty($_POST['page'])) {
-            $redirect_url .= "&page=" . (int)$_POST['page'];
-        }
-    } 
-    // If no search but we have limit or page
-    else if ((isset($_POST['limit']) && !empty($_POST['limit'])) || 
-             (isset($_POST['page']) && !empty($_POST['page']))) {
-        $redirect_url .= "?";
-        if (isset($_POST['limit']) && !empty($_POST['limit'])) {
-            $redirect_url .= "limit=" . (int)$_POST['limit'];
-        }
-        if (isset($_POST['page']) && !empty($_POST['page'])) {
-            $redirect_url .= (isset($_POST['limit']) && !empty($_POST['limit']) ? "&" : "") . "page=" . (int)$_POST['page'];
-        }
+    }
+    if (!empty($qp)) {
+        $redirect_url .= '?' . implode('&', $qp);
     }
     
     // Make sure we're enforcing the redirect properly
@@ -120,52 +105,59 @@ if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
     exit();
 }
 
-// Initialize search parameters
+// Initialize filter parameters
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 10;
+$filter_pay_status = isset($_GET['filter_pay_status']) ? trim($_GET['filter_pay_status']) : '';
+$filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
+$filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
+$filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
+$limit = 15;
 $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Build basic SQL query with JOIN to customers table and filter by pending status
-$countSql = "SELECT COUNT(*) as total FROM invoices i 
+// Build base SQL
+$baseFrom = "FROM invoices i 
              LEFT JOIN customers c ON i.customer_id = c.customer_id
-             LEFT JOIN users u2 ON i.created_by = u2.id
-             WHERE (i.status = 'pending' OR i.status IS NULL OR i.status = '')";
+             LEFT JOIN users u2 ON i.created_by = u2.id";
+$selectCols = "i.*, c.name as customer_name, c.business_name as customer_business_name,
+               u2.name as creator_name";
 
-$sql = "SELECT i.*, c.name as customer_name, c.business_name as customer_business_name,
-               u2.name as creator_name
-        FROM invoices i 
-        LEFT JOIN customers c ON i.customer_id = c.customer_id
-        LEFT JOIN users u2 ON i.created_by = u2.id
-        WHERE (i.status = 'pending' OR i.status IS NULL OR i.status = '')";
+// Build WHERE conditions
+$conditions = ["(i.status = 'pending' OR i.status IS NULL OR i.status = '')"];
 
-// Add search condition if search term is provided
 if (!empty($search)) {
-    $searchTerm = $conn->real_escape_string($search);
-    $searchCondition = " AND (
-                        i.invoice_id LIKE '%$searchTerm%' OR
-                        i.quotation_ref_no LIKE '%$searchTerm%' OR
-                        c.name LIKE '%$searchTerm%' OR
-                        c.business_name LIKE '%$searchTerm%' OR
-                        i.issue_date LIKE '%$searchTerm%' OR
-                        i.due_date LIKE '%$searchTerm%' OR
-                        i.total_amount LIKE '%$searchTerm%')";
-    $countSql .= $searchCondition;
-    $sql .= $searchCondition;
+    $s = $conn->real_escape_string($search);
+    $conditions[] = "(i.invoice_id LIKE '%$s%' OR i.quotation_ref_no LIKE '%$s%')";
 }
+if ($filter_pay_status !== '') {
+    $s = $conn->real_escape_string($filter_pay_status);
+    $conditions[] = "i.pay_status = '$s'";
+}
+if (!empty($filter_from_date)) {
+    $d = $conn->real_escape_string($filter_from_date);
+    $conditions[] = "i.issue_date >= '$d'";
+}
+if (!empty($filter_to_date)) {
+    $d = $conn->real_escape_string($filter_to_date);
+    $conditions[] = "i.issue_date <= '$d'";
+}
+if (!empty($filter_customer)) {
+    $c = $conn->real_escape_string($filter_customer);
+    $conditions[] = "(c.name LIKE '%$c%' OR c.business_name LIKE '%$c%')";
+}
+$whereClause = ' WHERE ' . implode(' AND ', $conditions);
+$countSql = "SELECT COUNT(*) as total $baseFrom $whereClause";
+$sql = "SELECT $selectCols $baseFrom $whereClause ORDER BY i.invoice_id DESC LIMIT $limit OFFSET $offset";
 
-// Add order by and pagination
-$sql .= " ORDER BY i.invoice_id DESC LIMIT $limit OFFSET $offset";
-
-// Execute the queries
+// Execute queries
 $countResult = $conn->query($countSql);
 $totalRows = 0;
 if ($countResult && $countResult->num_rows > 0) {
     $totalRows = $countResult->fetch_assoc()['total'];
 }
 $totalPages = ceil($totalRows / $limit);
-
 $result = $conn->query($sql);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -200,44 +192,63 @@ $result = $conn->query($sql);
                     <div class="card invoice-card">
                         <div class="card-body">
                             <!-- Filter Bar -->
-                            <div class="invoice-filter-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <form method="get" class="d-flex align-items-center gap-2 flex-grow-1">
-                                    <div class="position-relative flex-grow-1" style="max-width: 360px;">
-                                        <i class="fas fa-search position-absolute" style="top: 50%; left: 12px; transform: translateY(-50%); color: #a0aec0; font-size: 0.85rem;"></i>
-                                        <input type="text" name="search" class="form-control ps-4"
-                                            placeholder=" Search by invoice ID, customer, date..."
-                                            value="<?php echo htmlspecialchars($search); ?>">
+                            <div class="invoice-filter-bar">
+                                <form method="get" id="filterForm">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Search</label>
+                                            <input type="text" name="search" class="form-control" placeholder="Invoice ID or Ref No"
+                                                value="<?php echo htmlspecialchars($search); ?>">
+                                        </div>
+                                        <div class="col-md-3 col-lg-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Customer</label>
+                                            <input type="text" name="filter_customer" class="form-control" placeholder="Name or business..."
+                                                value="<?= htmlspecialchars($filter_customer) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Pay Status</label>
+                                            <select name="filter_pay_status" class="form-select">
+                                                <option value="">All</option>
+                                                <option value="paid" <?= $filter_pay_status === 'paid' ? 'selected' : '' ?>>Paid</option>
+                                                <option value="unpaid" <?= $filter_pay_status === 'unpaid' ? 'selected' : '' ?>>Unpaid</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
+                                            <input type="date" name="filter_from_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_from_date) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">To Date</label>
+                                            <input type="date" name="filter_to_date" class="form-control"
+                                                value="<?= htmlspecialchars($filter_to_date) ?>">
+                                        </div>
+                                        <div class="col-md-2 col-lg-auto d-flex gap-1 align-items-end">
+                                            <button type="submit" class="btn btn-primary btn-filter">
+                                                <i class="fas fa-search me-1"></i> Search
+                                            </button>
+                                            <a href="<?= BASE_URL ?>modules/invoices/pending_invoice_list.php" class="btn btn-outline-secondary btn-clear">
+                                                <i class="fas fa-times me-1"></i> Clear
+                                            </a>
+                                        </div>
                                     </div>
-                                    <button type="submit" class="btn btn-primary btn-filter">
-                                        <i class="fas fa-search me-1"></i> Search
-                                    </button>
-                                    <?php if (!empty($search)): ?>
-                                        <a href="<?= BASE_URL ?>modules/invoices/pending_invoice_list.php" class="btn btn-outline-secondary btn-clear">
-                                            <i class="fas fa-times me-1"></i> Clear
-                                        </a>
-                                    <?php endif; ?>
-                                    <input type="hidden" name="limit" value="<?php echo $limit; ?>">
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <form method="get" class="d-flex align-items-center gap-2">
-                                    <?php if (!empty($search)): ?>
-                                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="page" value="1">
-                                    <span class="entries-label">Show</span>
-                                    <select name="limit" class="form-select" style="width: 80px;" onchange="this.form.submit()">
-                                        <option value="10" <?php if ($limit == 10) echo 'selected'; ?>>10</option>
-                                        <option value="25" <?php if ($limit == 25) echo 'selected'; ?>>25</option>
-                                        <option value="50" <?php if ($limit == 50) echo 'selected'; ?>>50</option>
-                                        <option value="100" <?php if ($limit == 100) echo 'selected'; ?>>100</option>
-                                    </select>
-                                    <span class="entries-label">entries</span>
-                                </form>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>
+                                        <?php if (!empty($search) || $filter_pay_status !== '' || !empty($filter_from_date) || !empty($filter_to_date) || !empty($filter_customer)): ?>
+                                            <span class="search-count"><?php echo $totalRows; ?> Pending Invoice<?= $totalRows !== 1 ? 's' : '' ?> found</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <form method="get" class="d-flex align-items-center gap-2">
+                                        <?php foreach (['search','filter_pay_status','filter_from_date','filter_to_date','filter_customer'] as $f):
+                                            if (!empty($$f)): ?>
+                                            <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
+                                        <?php endif; endforeach; ?>
+                                        <input type="hidden" name="page" value="1">
+                                    </form>
+                                </div>
                             </div>
-
-                            <?php if (!empty($search)): ?>
-                                <div class="search-count"><?php echo $totalRows; ?> Pending Invoice<?= $totalRows !== 1 ? 's' : '' ?></div>
-                            <?php endif; ?>
                             
                             <div class="table-responsive">
                                 <table class="table table-invoice" id="invoice_table">
@@ -374,61 +385,7 @@ $result = $conn->query($sql);
                                         Showing <strong>0</strong> to <strong>0</strong> of <strong>0</strong> entries
                                     <?php endif; ?>
                                 </div>
-                                <nav aria-label="Page navigation">
-                                    <ul class="pagination mb-0">
-                                        <li class="page-item <?php if ($page <= 1) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-left"></i>
-                                            </a>
-                                        </li>
-
-                                        <?php
-                                        // Display a limited number of page links
-                                        $maxPagesToShow = 5;
-                                        $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
-                                        $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-
-                                        // Show "..." before the first page link if needed
-                                        if ($startPage > 1): ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=1&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">1</a>
-                                            </li>
-                                            <?php if ($startPage > 2): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-
-                                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                                            <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                                <a class="page-link"
-                                                    href="?page=<?php echo $i; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
-                                            </li>
-                                        <?php endfor; ?>
-
-                                        <?php 
-                                        // Show "..." after the last page link if needed
-                                        if ($endPage < $totalPages): ?>
-                                            <?php if ($endPage < $totalPages - 1): ?>
-                                                <li class="page-item disabled">
-                                                    <span class="page-link">...</span>
-                                                </li>
-                                            <?php endif; ?>
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page=<?php echo $totalPages; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>"><?php echo $totalPages; ?></a>
-                                            </li>
-                                        <?php endif; ?>
-
-                                        <li class="page-item <?php if ($page >= $totalPages) echo 'disabled'; ?>">
-                                            <a class="page-link"
-                                                href="?page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?>&search=<?php echo urlencode($search); ?>">
-                                                <i class="fas fa-chevron-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                                <?= renderPagination($page, $totalPages, $search) ?>
                             </div>
                         </div>
                     </div>
@@ -528,10 +485,12 @@ $result = $conn->query($sql);
                     <form method="post" id="cancelInvoiceForm" class="m-0">
                         <input type="hidden" name="invoice_id" id="confirm_cancel_invoice_id">
                         <input type="hidden" name="cancel_invoice" value="1">
-                        <input type="hidden" name="search" value="<?php echo htmlspecialchars($search); ?>">
-                        <input type="hidden" name="limit" value="<?php echo $limit; ?>">
-                        <input type="hidden" name="page" value="<?php echo $page; ?>">
-                        <button type="submit" class="btn btn-danger px-4 rounded-pill fw-bold">
+                            <?php foreach (['search','filter_pay_status','filter_from_date','filter_to_date','filter_customer'] as $f):
+                                    if (!empty($$f)): ?>
+                                    <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
+                                <?php endif; endforeach; ?>
+                                <input type="hidden" name="page" value="<?php echo $page; ?>">
+                                <button type="submit" class="btn btn-danger px-4 rounded-pill fw-bold">
                             <i class="fas fa-times me-1"></i>Confirm Cancel
                         </button>
                     </form>

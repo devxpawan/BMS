@@ -116,8 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
          $phone = trim($_POST['phone']);
          $address = trim($_POST['address']);
          $business_name = trim($_POST['business_name']);
-         $status = $_POST['status'];
-
         // Enhanced validation checks
         if (empty($name)) {
             $errorMsg = "Name cannot be empty.";
@@ -177,8 +175,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $phone = $cleanPhone;
 
                  // Prepare SQL statement to prevent SQL injection
-                 $stmt = $conn->prepare("INSERT INTO customers (name, email, phone, address, business_name, status) VALUES (?, ?, ?, ?, ?, ?)");
-                 $stmt->bind_param("ssssss", $name, $email, $phone, $address, $business_name, $status);
+                  $stmt = $conn->prepare("INSERT INTO customers (name, email, phone, address, business_name, status) VALUES (?, ?, ?, ?, ?, 'active')");
+                  $stmt->bind_param("sssss", $name, $email, $phone, $address, $business_name);
 
                 // Execute the statement
                 if ($stmt->execute()) {
@@ -286,7 +284,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             
                             <div class="row">
-                                <!-- Customer Details Section -->
                                 <div class="col-md-6">
                                     <div class="premium-section-header">
                                         <i class="fas fa-id-card me-2"></i> Customer Details
@@ -315,6 +312,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                 placeholder="name@example.com" value="<?php echo isset($email) ? htmlspecialchars($email) : ''; ?>">
                                             <div class="error-feedback" id="email-error"></div>
                                         </div>
+                                    </div>
+
+                                <div class="col-md-6">
+                                    <div class="premium-section-header">
+                                        <i class="fas fa-address-book me-2"></i> Contact Details
+                                    </div>
 
                                         <!-- Phone Field -->
                                         <div class="mb-3">
@@ -331,23 +334,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                  placeholder="Address" required rows="3"><?php echo isset($address) ? htmlspecialchars($address) : ''; ?></textarea>
                                             <div class="error-feedback" id="address-error"></div>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- Configuration Details Section -->
-                                    <div class="col-md-6">
-                                        <div class="premium-section-header">
-                                            <i class="fas fa-cog me-2"></i> Configuration Details
-                                        </div>
-
-                                        <!-- Status Field -->
-                                        <div class="mb-3">
-                                            <label for="status" class="form-label">Status</label>
-                                            <select class="form-select" id="status" name="status" required>
-                                                <option value="active" <?php echo (isset($status) && $status == 'active') ? 'selected' : ''; ?>>Active</option>
-                                                <option value="inactive" <?php echo (isset($status) && $status == 'inactive') ? 'selected' : ''; ?>>Inactive</option>
-                                            </select>
-                                        </div>
-
                                     </div>
                                 </div>
                                 
@@ -724,15 +710,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <!-- Select2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script>
-    $(document).ready(function() {
-        $('#status').select2({
-            theme: 'bootstrap-5',
-            width: '100%',
-            minimumResultsForSearch: Infinity
-        });
-    });
-    </script>
+
     
     <?php
     // Close the connection at the end of the script
