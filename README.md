@@ -33,6 +33,13 @@
 - Convert quotations to invoices
 - Quotation status tracking (draft, accepted, cancelled)
 
+### 📦 Purchase Order Management
+- Create and manage purchase orders
+- Edit, view, and print purchase orders
+- Purchase order status tracking (pending, approved, received, cancelled)
+- Supplier information management
+- Line item details with product, quantity, and pricing
+
 ### 📋 Price Lists & Asset Management
 - Create and manage price lists
 - Asset management within price lists
