@@ -600,14 +600,7 @@ require_once __DIR__ . '/../config/paths.php';
                         <a class="nav-link" href="<?= BASE_URL ?>modules/users/add_user.php" id="add-user-link">Add New User</a>
                         <a class="nav-link" href="<?= BASE_URL ?>modules/users/user_logs.php" id="user-logs-link">Activity Logs</a>
                     </nav>
-                </div>
-
-                <!-- Settings (Admin Only) -->
-                <a class="nav-link" href="<?= BASE_URL ?>modules/settings/company_settings.php" id="company-settings-link">
-                    <div class="sb-nav-link-icon"><i class="fas fa-cog"></i></div>
-                    Settings
-                </a>
-                <?php endif; ?>
+                </div>                <?php endif; ?>
 
                 <!-- Products -->
                 <div class="sb-sidenav-menu-heading">Catalog</div>
@@ -620,9 +613,26 @@ require_once __DIR__ . '/../config/paths.php';
                 <div class="collapse" id="collapseProducts" data-bs-parent="#sidenavAccordion">
                     <nav class="sb-sidenav-menu-nested nav">
                         <a class="nav-link" href="<?= BASE_URL ?>modules/products/product_list.php" id="all-products-link">All Products</a>
+                        <a class="nav-link" href="<?= BASE_URL ?>modules/products/categories.php" id="categories-link">Product Categories</a>
                         <?php if ($canEditRecords): ?>
                         <a class="nav-link" href="<?= BASE_URL ?>modules/products/add_product.php" id="add-product-link">Add New Product</a>
                         <?php endif; ?>
+                    </nav>
+                </div>
+
+                <!-- Inventory & Supply Chain -->
+                <div class="sb-sidenav-menu-heading">Inventory</div>
+                <a class="nav-link collapsed" href="javascript:void(0);" data-bs-toggle="collapse" data-bs-target="#collapseInventory"
+                    aria-expanded="false" aria-controls="collapseInventory" id="inventory-dropdown">
+                    <div class="sb-nav-link-icon"><i class="fas fa-boxes"></i></div>
+                    Inventory
+                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                </a>
+                <div class="collapse" id="collapseInventory" data-bs-parent="#sidenavAccordion">
+                    <nav class="sb-sidenav-menu-nested nav">
+                        <a class="nav-link" href="<?= BASE_URL ?>modules/inventory/suppliers.php" id="suppliers-link">Suppliers</a>
+                        <a class="nav-link" href="<?= BASE_URL ?>modules/inventory/purchase_orders.php" id="purchase-orders-link">Purchase Orders</a>
+                        <a class="nav-link" href="<?= BASE_URL ?>modules/inventory/stock_movements.php" id="stock-movements-link">Stock Movements</a>
                     </nav>
                 </div>
             </div>
@@ -652,6 +662,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    // Restore and save sidebar scroll position
+    const menuContainer = document.querySelector('.sb-sidenav-menu');
+    if (menuContainer) {
+        const restoreScroll = () => {
+            const savedScrollTop = localStorage.getItem('sidebarScrollPosition');
+            if (savedScrollTop !== null) {
+                menuContainer.scrollTop = parseInt(savedScrollTop, 10);
+            }
+        };
+
+        restoreScroll();
+        // Also restore after a short delay to account for collapse animations
+        setTimeout(restoreScroll, 150);
+
+        // Save scroll position when scrolling
+        menuContainer.addEventListener('scroll', function() {
+            localStorage.setItem('sidebarScrollPosition', menuContainer.scrollTop);
+        });
+    }
 
     // Overlay click to close sidebar on mobile
     const overlay = document.getElementById('sidebarOverlay');

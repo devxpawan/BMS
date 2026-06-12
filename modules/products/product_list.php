@@ -210,6 +210,7 @@ $result = $conn->query($sql);
                                             <th>Name</th>
                                             <th>Description</th>
                                             <th>Price (LKR)</th>
+                                            <th>Stock Level</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -235,6 +236,18 @@ $result = $conn->query($sql);
                                                             echo '<span class="product-currency">N/A</span>';
                                                         }
                                                         ?>
+                                                    </td>
+                                                    <td>
+                                                        <span class="stock-level">
+                                                            <?php
+                                                            $stock = (int)($row['stock_quantity'] ?? 0);
+                                                            $reorder = (int)($row['reorder_level'] ?? 0);
+                                                            $unit = htmlspecialchars($row['unit'] ?? 'pcs');
+                                                            $barColor = $stock <= 0 ? 'red' : ($stock <= $reorder ? 'yellow' : 'green');
+                                                            ?>
+                                                            <span class="stock-dot <?= $barColor ?>"></span>
+                                                            <?= $stock ?> <?= $unit ?>
+                                                        </span>
                                                     </td>
                                                     <td>
                                                         <?php
@@ -314,6 +327,14 @@ $result = $conn->query($sql);
                                                                             }
                                                                             ?>
                                                                         </p>
+                                                                    </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-boxes"></i>Stock Level</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['stock_quantity'] ?? '0') ?> <?= htmlspecialchars($row['unit'] ?? 'pcs') ?></p>
+                                                                    </div>
+                                                                    <div class="detail-card">
+                                                                        <span class="detail-label"><i class="fas fa-triangle-exclamation"></i>Reorder Level</span>
+                                                                        <p class="detail-value"><?= htmlspecialchars($row['reorder_level'] ?? '0') ?></p>
                                                                     </div>
                                                                     <div class="detail-card">
                                                                         <span class="detail-label"><i class="fas fa-calendar"></i>Created At</span>

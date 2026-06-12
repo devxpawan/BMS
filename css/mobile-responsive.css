@@ -126,7 +126,9 @@
     .table-product,
     .table-quotation,
     .table-inquiry,
-    .dash-table {
+    .dash-table,
+    .inventory-container table,
+    .receive-stock-table {
         min-width: 600px;
     }
 
@@ -135,7 +137,9 @@
     .table-product thead th,
     .table-quotation thead th,
     .table-inquiry thead th,
-    .dash-table thead th {
+    .dash-table thead th,
+    .inventory-container table thead th,
+    .receive-stock-table thead th {
         padding: 8px 10px !important;
         font-size: 10px !important;
         letter-spacing: 0.03em;
@@ -146,7 +150,9 @@
     .table-product tbody td,
     .table-quotation tbody td,
     .table-inquiry tbody td,
-    .dash-table tbody td {
+    .dash-table tbody td,
+    .inventory-container table tbody td,
+    .receive-stock-table tbody td {
         padding: 8px 10px !important;
         font-size: 12px !important;
     }
@@ -158,7 +164,9 @@
     .table-product thead th,
     .table-quotation thead th,
     .table-inquiry thead th,
-    .dash-table thead th {
+    .dash-table thead th,
+    .inventory-container table thead th,
+    .receive-stock-table thead th {
         padding: 6px 8px !important;
         font-size: 9px !important;
     }
@@ -168,7 +176,9 @@
     .table-product tbody td,
     .table-quotation tbody td,
     .table-inquiry tbody td,
-    .dash-table tbody td {
+    .dash-table tbody td,
+    .inventory-container table tbody td,
+    .receive-stock-table tbody td {
         padding: 6px 8px !important;
         font-size: 11px !important;
     }
@@ -176,14 +186,16 @@
     .invoice-card .card-body,
     .product-card .card-body,
     .quotation-card .card-body,
-    .inquiry-card .card-body {
+    .inquiry-card .card-body,
+    .inventory-card .card-body {
         padding: 12px !important;
     }
 
     .invoice-card .section-title,
     .product-card .section-title,
     .quotation-card .section-title,
-    .inquiry-card .section-title {
+    .inquiry-card .section-title,
+    .inventory-card .section-title {
         font-size: 14px;
         margin-bottom: 12px;
         padding-bottom: 8px;
@@ -685,7 +697,8 @@
     .invoice-card .card-body,
     .product-card .card-body,
     .quotation-card .card-body,
-    .inquiry-card .card-body {
+    .inquiry-card .card-body,
+    .inventory-card .card-body {
         padding: 8px !important;
     }
 
@@ -694,7 +707,9 @@
     .table-product thead th,
     .table-quotation thead th,
     .table-inquiry thead th,
-    .dash-table thead th {
+    .dash-table thead th,
+    .inventory-container table thead th,
+    .receive-stock-table thead th {
         padding: 4px 6px !important;
         font-size: 8px !important;
     }
@@ -704,7 +719,9 @@
     .table-product tbody td,
     .table-quotation tbody td,
     .table-inquiry tbody td,
-    .dash-table tbody td {
+    .dash-table tbody td,
+    .inventory-container table tbody td,
+    .receive-stock-table tbody td {
         padding: 4px 6px !important;
         font-size: 10px !important;
     }

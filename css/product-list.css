@@ -457,3 +457,23 @@
     font-weight: 600;
     margin: 0;
 }
+
+/* ---------- Stock level indicators ---------- */
+.stock-level {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.stock-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.stock-dot.green { background: #10b981; }
+.stock-dot.yellow { background: #f59e0b; }
+.stock-dot.red { background: #ef4444; }

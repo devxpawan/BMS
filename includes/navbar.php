@@ -28,6 +28,8 @@ if (isset($_SESSION['user_id'])) {
     $user = $stmt->get_result()->fetch_assoc();
 }
 
+$isAdmin = isset($_SESSION['role_id']) && (int)$_SESSION['role_id'] === 1;
+
 // Get user initials for avatar fallback
 function getUserInitials($name) {
     $parts = explode(' ', trim($name ?? ''));
@@ -303,13 +305,12 @@ function getUserInitials($name) {
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 16px;
     box-shadow:
         0 4px 6px rgba(0, 0, 0, 0.04),
         0 10px 40px rgba(0, 0, 0, 0.08);
-    padding: 8px;
+    padding: 6px;
     overflow: hidden;
-    min-width: 240px;
+    min-width: 200px;
     margin-top: 8px !important;
     animation: dropdownFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -386,14 +387,14 @@ function getUserInitials($name) {
 
 /* ── Dropdown items ───────────────────────────────────────── */
 .nav-dropdown-item {
-    padding: 10px 14px;
+    padding: 6px 10px;
     color: #475569;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 10px;
-    border-radius: 10px;
+    gap: 8px;
+    border-radius: 8px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     background: transparent;
     text-decoration: none;
@@ -407,14 +408,14 @@ function getUserInitials($name) {
 }
 
 .nav-dropdown-item .dd-icon {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 9px;
+    border-radius: 7px;
     background: #f1f5f9;
-    font-size: 13px;
+    font-size: 11px;
     color: #64748b;
     flex-shrink: 0;
     transition: all 0.2s ease;
@@ -461,7 +462,7 @@ function getUserInitials($name) {
 .nav-dropdown-divider {
     height: 1px;
     background: rgba(226, 232, 240, 0.5);
-    margin: 4px 8px;
+    margin: 3px 6px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -551,6 +552,15 @@ function getUserInitials($name) {
                 <i class="fas fa-chevron-down nav-chevron d-none d-lg-block"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end nav-dropdown-menu" aria-labelledby="userDropdown">
+                <?php if ($isAdmin): ?>
+                <li>
+                    <a class="dropdown-item nav-dropdown-item" href="<?= BASE_URL ?>modules/settings/company_settings.php">
+                        <span class="dd-icon"><i class="fas fa-cog"></i></span>
+                        <span class="dd-text">Settings</span>
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider nav-dropdown-divider"></li>
+                <?php endif; ?>
                 <li>
                     <a class="dropdown-item nav-dropdown-item item-danger" href="<?= BASE_URL ?>modules/auth/logout.php">
                         <span class="dd-icon"><i class="fas fa-arrow-right-from-bracket"></i></span>
