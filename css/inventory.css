@@ -302,7 +302,7 @@
 .inventory-container .table thead th,
 .inventory-container .table-light th,
 .inventory-container table thead th {
-    background: #303361 !important;
+    background: #0b3354 !important;
     color: #FFFFFF !important;
     font-weight: 600;
     font-size: 11px;
@@ -620,7 +620,7 @@
     font-weight: 500;
 }
 
-.invoice-filter-bar .search-count {
+.search-count {
     display: inline-flex;
     align-items: center;
     gap: 4px;

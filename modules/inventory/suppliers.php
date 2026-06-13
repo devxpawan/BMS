@@ -151,15 +151,11 @@ $suppliers = $conn->query("SELECT s.*, (SELECT COUNT(*) FROM purchase_orders WHE
                                     </div>
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <?php if (!empty($search) || $filter_status !== ''): ?>
-                                <div class="d-flex justify-content-between align-items-center mt-2">
-                                    <div>
-                                        <span class="search-count"><?= $totalRows; ?> Supplier<?= $totalRows !== 1 ? 's' : '' ?> found</span>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
                             </div>
 
+                            <div class="d-flex justify-content-start mt-2 mb-2">
+                                <span class="search-count"><?= $totalRows; ?> Supplier<?= $totalRows !== 1 ? 's' : '' ?></span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table">
                                     <thead class="table-light">

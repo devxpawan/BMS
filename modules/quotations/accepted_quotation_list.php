@@ -121,23 +121,11 @@ $result = $conn->query($sql);
                                     <input type="hidden" name="page" value="1">
                                     <input type="hidden" name="limit" value="<?= $limit ?>">
                                 </form>
-                                <div class="d-flex justify-content-between align-items-center mt-2">
-                                    <div>
-                                        <?php if (!empty($search) || !empty($filter_from_date) || !empty($filter_to_date) || !empty($filter_customer)): ?>
-                                            <span class="search-count"><?php echo $totalRows; ?> Accepted Quotation<?= $totalRows !== 1 ? 's' : '' ?> found</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <form method="get" class="d-flex align-items-center gap-2">
-                                        <?php foreach (['search','filter_customer','filter_from_date','filter_to_date'] as $f):
-                                            if (!empty($$f)): ?>
-                                            <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
-                                        <?php endif; endforeach; ?>
-                                        <input type="hidden" name="page" value="1">
-                                        <input type="hidden" name="limit" value="<?= $limit ?>">
-                                    </form>
-                                </div>
                             </div>
                             
+                            <div class="d-flex justify-content-start mt-2 mb-2">
+                                <span class="search-count"><?php echo $totalRows; ?> Accepted Quotation<?= $totalRows !== 1 ? 's' : '' ?></span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-quotation">
                                     <thead class="table-light">

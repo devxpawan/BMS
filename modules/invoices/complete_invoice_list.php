@@ -177,22 +177,11 @@ if ($pu) {
                                             </div>
                                             <input type="hidden" name="page" value="1">
                                         </form>
-                                        <div class="d-flex justify-content-between align-items-center mt-2">
-                                            <div>
-<?php if (!empty($search) || $filter_pay_status !== '' || !empty($filter_from_date) || !empty($filter_to_date) || !empty($filter_customer) || $filter_processed_by > 0): ?>
-                                                    <span class="search-count"><?php echo $totalRows; ?> Complete Invoice<?= $totalRows !== 1 ? 's' : '' ?> found</span>
-                                                <?php endif; ?>
-                                            </div>
-                                            <form method="get" class="d-flex align-items-center gap-2">
-                                                <?php foreach (['search','filter_pay_status','filter_from_date','filter_to_date','filter_customer','filter_processed_by'] as $f):
-                                                    if (!empty($$f) || ($f === 'filter_processed_by' && $$f > 0)): ?>
-                                                    <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
-                                                <?php endif; endforeach; ?>
-                                                <input type="hidden" name="page" value="1">
-                                            </form>
-                                        </div>
                                     </div>
                             
+                            <div class="d-flex justify-content-start mt-2 mb-2">
+                                <span class="search-count"><?php echo $totalRows; ?> Complete Invoice<?= $totalRows !== 1 ? 's' : '' ?></span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-invoice" id="invoice_table">
                                     <thead class="table-light">

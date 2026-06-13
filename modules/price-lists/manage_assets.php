@@ -95,15 +95,11 @@ $result = $conn->query($sql);
                                     </div>
                                     <input type="hidden" name="page" value="1">
                                 </form>
-                                <div class="d-flex justify-content-between align-items-center mt-2">
-                                    <div>
-                                        <?php if (!empty($filter_name) || $filter_status !== ''): ?>
-                                            <span class="search-count"><?php echo $totalRows; ?> Asset<?= $totalRows !== 1 ? 's' : '' ?> found</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
                             </div>
 
+                            <div class="d-flex justify-content-start mt-2 mb-2">
+                                <span class="search-count"><?php echo $totalRows; ?> Asset<?= $totalRows !== 1 ? 's' : '' ?></span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-invoice align-middle mb-0" id="asset_table">
                                     <thead class="table-light">
