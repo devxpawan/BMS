@@ -194,6 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
 // Fetch POs
 $filter_status = isset($_GET['filter_status']) ? trim($_GET['filter_status']) : '';
 $filter_supplier = isset($_GET['filter_supplier']) ? trim($_GET['filter_supplier']) : '';
+$filter_po = isset($_GET['filter_po']) ? trim($_GET['filter_po']) : '';
+$filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
+$filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
 
 $where = [];
 if ($filter_status !== '') {
@@ -203,6 +206,18 @@ if ($filter_status !== '') {
 if (!empty($filter_supplier)) {
     $s = $conn->real_escape_string($filter_supplier);
     $where[] = "sup.company_name LIKE '%$s%'";
+}
+if (!empty($filter_po)) {
+    $s = $conn->real_escape_string($filter_po);
+    $where[] = "po.po_number LIKE '%$s%'";
+}
+if (!empty($filter_from_date)) {
+    $d = $conn->real_escape_string($filter_from_date);
+    $where[] = "po.order_date >= '$d'";
+}
+if (!empty($filter_to_date)) {
+    $d = $conn->real_escape_string($filter_to_date);
+    $where[] = "po.order_date <= '$d'";
 }
 $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -267,11 +282,24 @@ $products = $conn->query("SELECT id, name, sku, lkr_price, stock_quantity, unit 
                             <div class="invoice-filter-bar mb-3">
                                 <form method="get">
                                     <div class="row g-2 align-items-end">
-                                        <div class="col-md-3">
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">PO Number</label>
+                                            <input type="text" name="filter_po" class="form-control" placeholder="PO number" value="<?= htmlspecialchars($filter_po) ?>">
+                                        </div>
+                                        <div class="col-md-2">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Supplier</label>
                                             <input type="text" name="filter_supplier" class="form-control" placeholder="Supplier name" value="<?= htmlspecialchars($filter_supplier) ?>">
                                         </div>
                                         <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
+                                            <input type="date" name="filter_from_date" class="form-control" value="<?= htmlspecialchars($filter_from_date) ?>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">To Date</label>
+                                            <input type="date" name="filter_to_date" class="form-control" value="<?= htmlspecialchars($filter_to_date) ?>">
+                                        </div>
+                                        
+                                        <div class="col-md-1">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Status</label>
                                             <select name="filter_status" class="form-select">
                                                 <option value="">All</option>
@@ -286,6 +314,7 @@ $products = $conn->query("SELECT id, name, sku, lkr_price, stock_quantity, unit 
                                             <button type="submit" class="btn btn-primary btn-filter"><i class="fas fa-search me-1"></i> Search</button>
                                             <a href="<?= BASE_URL ?>modules/inventory/purchase_orders.php" class="btn btn-outline-secondary btn-clear"><i class="fas fa-times me-1"></i> Clear</a>
                                         </div>
+                                        
                                     </div>
                                     <input type="hidden" name="page" value="1">
                                 </form>

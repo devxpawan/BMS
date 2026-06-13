@@ -107,7 +107,6 @@ if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
 
 // Initialize filter parameters
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$filter_pay_status = isset($_GET['filter_pay_status']) ? trim($_GET['filter_pay_status']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
 $filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
 $filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
@@ -128,10 +127,6 @@ $conditions = ["(i.status = 'pending' OR i.status IS NULL OR i.status = '')"];
 if (!empty($search)) {
     $s = $conn->real_escape_string($search);
     $conditions[] = "(i.invoice_id LIKE '%$s%' OR i.quotation_ref_no LIKE '%$s%')";
-}
-if ($filter_pay_status !== '') {
-    $s = $conn->real_escape_string($filter_pay_status);
-    $conditions[] = "i.pay_status = '$s'";
 }
 if (!empty($filter_from_date)) {
     $d = $conn->real_escape_string($filter_from_date);
@@ -204,14 +199,6 @@ $result = $conn->query($sql);
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Customer</label>
                                             <input type="text" name="filter_customer" class="form-control" placeholder="Name or business..."
                                                 value="<?= htmlspecialchars($filter_customer) ?>">
-                                        </div>
-                                        <div class="col-md-2 col-lg-1">
-                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Pay Status</label>
-                                            <select name="filter_pay_status" class="form-select">
-                                                <option value="">All</option>
-                                                <option value="paid" <?= $filter_pay_status === 'paid' ? 'selected' : '' ?>>Paid</option>
-                                                <option value="unpaid" <?= $filter_pay_status === 'unpaid' ? 'selected' : '' ?>>Unpaid</option>
-                                            </select>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
@@ -474,7 +461,7 @@ $result = $conn->query($sql);
                     <form method="post" id="cancelInvoiceForm" class="m-0">
                         <input type="hidden" name="invoice_id" id="confirm_cancel_invoice_id">
                         <input type="hidden" name="cancel_invoice" value="1">
-                            <?php foreach (['search','filter_pay_status','filter_from_date','filter_to_date','filter_customer'] as $f):
+                            <?php foreach (['search','filter_from_date','filter_to_date','filter_customer'] as $f):
                                     if (!empty($$f)): ?>
                                     <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
                                 <?php endif; endforeach; ?>

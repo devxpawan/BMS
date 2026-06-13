@@ -11,7 +11,6 @@ require_once BASE_PATH . 'includes/functions.php';
 
 // Initialize filter parameters
 $filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
-$filter_currency = isset($_GET['filter_currency']) ? trim($_GET['filter_currency']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
 $filter_to_date = isset($_GET['filter_to_date']) ? trim($_GET['filter_to_date']) : '';
 $limit = 10;
@@ -23,10 +22,6 @@ $conditions = [];
 if (!empty($filter_customer)) {
     $s = $conn->real_escape_string($filter_customer);
     $conditions[] = "c.name LIKE '%$s%'";
-}
-if ($filter_currency !== '') {
-    $s = $conn->real_escape_string($filter_currency);
-    $conditions[] = "pl.currency = '$s'";
 }
 if (!empty($filter_from_date)) {
     $d = $conn->real_escape_string($filter_from_date);
@@ -40,9 +35,6 @@ $whereClause = '';
 if (!empty($conditions)) {
     $whereClause = ' WHERE ' . implode(' AND ', $conditions);
 }
-
-// Fetch distinct currencies for filter dropdown
-$currenciesResult = $conn->query("SELECT DISTINCT currency FROM price_lists ORDER BY currency");
 
 // Count total price lists
 $countSql = "SELECT COUNT(*) as total FROM price_lists pl LEFT JOIN customers c ON pl.customer_id = c.customer_id$whereClause";
@@ -118,15 +110,6 @@ $result = $conn->query($sql);
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Customer</label>
                                             <input type="text" name="filter_customer" class="form-control" placeholder="Customer name"
                                                 value="<?= htmlspecialchars($filter_customer) ?>">
-                                        </div>
-                                        <div class="col-md-2 col-lg-1">
-                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Currency</label>
-                                            <select name="filter_currency" class="form-select">
-                                                <option value="">All</option>
-                                                <?php if ($currenciesResult): while ($cur = $currenciesResult->fetch_assoc()): ?>
-                                                    <option value="<?= htmlspecialchars($cur['currency']) ?>" <?= $filter_currency === $cur['currency'] ? 'selected' : '' ?>><?= strtoupper(htmlspecialchars($cur['currency'])) ?></option>
-                                                <?php endwhile; endif; ?>
-                                            </select>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">From Date</label>
