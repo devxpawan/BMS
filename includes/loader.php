@@ -1,6 +1,6 @@
 <style>
     :root {
-        --m3-primary: #2563eb;
+        --m3-primary: #0b3354;
         --m3-surface: #ffffff;
         --m3-surface-variant: #f1f5f9;
     }

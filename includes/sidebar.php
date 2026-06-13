@@ -20,7 +20,7 @@
 
 /* ── Sidenav core ─────────────────────────────────────────── */
 #sidenavAccordion {
-    background: #3F4D67;
+    background: #0b3354;
     height: 100%;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     overflow: hidden;
@@ -231,8 +231,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .sb-sidenav-menu .nav-link.active {
-    background: rgba(99, 102, 241, 0.14);
-    color: #c7d2fe;
+    background: rgba(11, 51, 84, 0.3);
+    color: #ffffff;
 }
 
 .sb-sidenav-menu .nav-link.active::before {
@@ -242,7 +242,7 @@
     top: 7px;
     bottom: 7px;
     width: 3px;
-    background: linear-gradient(to bottom, #818cf8, #6366f1);
+    background: linear-gradient(to bottom, #1a5a8a, #0b3354);
     border-radius: 0 3px 3px 0;
     z-index: 1;
 }
@@ -252,7 +252,7 @@
 }
 
 .sb-sidenav-menu .nav-link.active .sb-nav-link-icon {
-    color: #818cf8;
+    color: #ffffff;
 }
 
 /* ── Parent active (expanded dropdown) ───────────────────── */
@@ -320,14 +320,14 @@
 
 /* Submenu active state */
 .sb-sidenav-menu-nested .nav-link.active {
-    background: rgba(99, 102, 241, 0.14);
-    color: #c7d2fe;
+    background: rgba(11, 51, 84, 0.3);
+    color: #ffffff;
     padding-left: 26px;
 }
 
 .sb-sidenav-menu-nested .nav-link.active::before {
     transform: translateY(-50%) scale(1);
-    background: #818cf8;
+    background: #ffffff;
     left: 8px;
     top: 50%;
     width: 5px;

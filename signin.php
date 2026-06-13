@@ -133,7 +133,7 @@ $conn->close();
         /* LEFT PANEL */
         .split-left {
             flex: 1;
-            background: #3F4D67;
+            background: #0b3354;
             color: #fff;
             display: flex;
             flex-direction: column;
@@ -292,15 +292,15 @@ $conn->close();
         }
 
         .input-icon-wrapper input:focus {
-            border-color: #3b5bdb;
+            border-color: #0b3354;
             outline: none;
             background: #fff;
-            box-shadow: 0 0 0 4px rgba(59, 91, 219, 0.08);
+            box-shadow: 0 0 0 4px rgba(11, 51, 84, 0.08);
         }
 
         .input-icon-wrapper input:focus ~ i,
         .input-icon-wrapper input:focus + i {
-            color: #3b5bdb;
+            color: #0b3354;
         }
 
         .password-container {
@@ -329,7 +329,7 @@ $conn->close();
         }
 
         .password-toggle:hover {
-            color: #3b5bdb;
+            color: #0b3354;
         }
 
         .password-container input {
@@ -358,7 +358,7 @@ $conn->close();
         .input-group.remember-me input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #3b5bdb;
+            accent-color: #0b3354;
             cursor: pointer;
         }
 
@@ -367,7 +367,7 @@ $conn->close();
             padding: 14px;
             font-size: 15px;
             font-weight: 600;
-            background: linear-gradient(135deg, #3b5bdb, #5c7cfa);
+            background: linear-gradient(135deg, #0b3354, #1a5a8a);
             color: white;
             border: none;
             border-radius: 10px;
@@ -375,12 +375,12 @@ $conn->close();
             transition: all 0.3s ease;
             font-family: 'Inter', sans-serif;
             letter-spacing: 0.3px;
-            box-shadow: 0 4px 15px rgba(59, 91, 219, 0.3);
+            box-shadow: 0 4px 15px rgba(11, 51, 84, 0.3);
         }
 
         .split-right button:hover {
-            background: linear-gradient(135deg, #364fc7, #4c6ef5);
-            box-shadow: 0 6px 20px rgba(59, 91, 219, 0.4);
+            background: linear-gradient(135deg, #08263f, #154b75);
+            box-shadow: 0 6px 20px rgba(11, 51, 84, 0.4);
             transform: translateY(-1px);
         }
 
@@ -396,7 +396,7 @@ $conn->close();
         }
 
         .split-right .signup-link a {
-            color: #3b5bdb;
+            color: #0b3354;
             text-decoration: none;
             font-weight: 600;
         }

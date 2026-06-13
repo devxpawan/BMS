@@ -95,7 +95,7 @@ function getUserInitials($name) {
     position: absolute;
     inset: 0;
     border-radius: 12px;
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(11, 51, 84, 0.08);
     transform: scale(0);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -105,7 +105,7 @@ function getUserInitials($name) {
 }
 
 .nav-toggle-btn:hover {
-    color: #6366f1;
+    color: #0b3354;
 }
 
 .nav-toggle-btn:hover i {
@@ -119,7 +119,7 @@ function getUserInitials($name) {
 }
 
 .nav-toggle-btn:active::before {
-    background: rgba(99, 102, 241, 0.14);
+    background: rgba(11, 51, 84, 0.14);
 }
 
 /* ── Spacer ───────────────────────────────────────────────── */
@@ -156,7 +156,7 @@ function getUserInitials($name) {
     position: absolute;
     inset: 0;
     border-radius: 12px;
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(11, 51, 84, 0.08);
     transform: scale(0);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -166,7 +166,7 @@ function getUserInitials($name) {
 }
 
 .nav-action-btn:hover {
-    color: #6366f1;
+    color: #0b3354;
 }
 
 .nav-action-btn:hover i {
@@ -232,8 +232,8 @@ function getUserInitials($name) {
 
 .nav-user-toggle:hover,
 .nav-user-toggle.show {
-    background: rgba(99, 102, 241, 0.06);
-    border-color: rgba(99, 102, 241, 0.1);
+    background: rgba(11, 51, 84, 0.06);
+    border-color: rgba(11, 51, 84, 0.1);
 }
 
 /* ── Avatar ───────────────────────────────────────────────── */
@@ -248,16 +248,16 @@ function getUserInitials($name) {
     font-weight: 700;
     color: #fff;
     letter-spacing: 0.5px;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    background: linear-gradient(135deg, #0b3354, #1a5a8a);
     flex-shrink: 0;
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
                 box-shadow 0.25s ease;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 2px 8px rgba(11, 51, 84, 0.25);
 }
 
 .nav-user-toggle:hover .nav-avatar {
     transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+    box-shadow: 0 4px 12px rgba(11, 51, 84, 0.35);
 }
 
 /* ── User info text ───────────────────────────────────────── */
@@ -296,7 +296,7 @@ function getUserInitials($name) {
 
 .nav-user-toggle[aria-expanded="true"] .nav-chevron {
     transform: rotate(180deg);
-    color: #6366f1;
+    color: #0b3354;
 }
 
 /* ── Dropdown menu ────────────────────────────────────────── */
@@ -346,9 +346,9 @@ function getUserInitials($name) {
     font-size: 14px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    background: linear-gradient(135deg, #0b3354, #1a5a8a);
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 8px rgba(11, 51, 84, 0.3);
 }
 
 .nav-dropdown-user-info {
@@ -403,7 +403,7 @@ function getUserInitials($name) {
 
 .nav-dropdown-item:hover,
 .nav-dropdown-item:focus {
-    background: rgba(99, 102, 241, 0.06) !important;
+    background: rgba(11, 51, 84, 0.06) !important;
     color: #1e293b;
 }
 
@@ -422,8 +422,8 @@ function getUserInitials($name) {
 }
 
 .nav-dropdown-item:hover .dd-icon {
-    background: rgba(99, 102, 241, 0.1);
-    color: #6366f1;
+    background: rgba(11, 51, 84, 0.1);
+    color: #0b3354;
 }
 
 .nav-dropdown-item .dd-text {
