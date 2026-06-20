@@ -62,3 +62,7 @@
 - **Frontend:** HTML, CSS, JavaScript
 - **Icons:** Font Awesome
 - **Styling:** Custom CSS with responsive design
+
+
+//username: admin
+//password: 12345678
