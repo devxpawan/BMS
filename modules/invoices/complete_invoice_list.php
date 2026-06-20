@@ -19,13 +19,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php'; // Include helper functions
 
-// Only Admin and Moderator can access complete invoices
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-if ($current_user_role !== 1 && $current_user_role !== 3) {
-    header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
-    exit();
-}
-
 // Initialize filter parameters
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
@@ -39,13 +32,18 @@ $offset = ($page - 1) * $limit;
 // Build base SQL
 $baseFrom = "FROM invoices i 
              LEFT JOIN customers c ON i.customer_id = c.customer_id
-             LEFT JOIN payments p ON i.invoice_id = p.invoice_id
-             LEFT JOIN users u ON p.pay_by = u.id
+             LEFT JOIN (
+                 SELECT p1.invoice_id, p1.payment_method, p1.payment_date, p1.pay_by, u1.name as paid_by_name
+                 FROM payments p1
+                 LEFT JOIN users u1 ON p1.pay_by = u1.id
+                 WHERE p1.payment_id = (
+                     SELECT MAX(p2.payment_id) FROM payments p2 WHERE p2.invoice_id = p1.invoice_id
+                 )
+             ) p ON i.invoice_id = p.invoice_id
              LEFT JOIN users u2 ON i.created_by = u2.id";
 
 $selectCols = "i.*, c.name as customer_name, c.business_name as customer_business_name,
-               p.payment_id, p.amount_paid, p.payment_method, p.payment_date, p.pay_by,
-               u.name as paid_by_name,
+               p.payment_method, p.payment_date, p.pay_by, p.paid_by_name,
                u2.name as creator_name";
 
 // Build WHERE conditions
@@ -177,7 +175,7 @@ if ($pu) {
                                                 <th>Issue Date</th>
                                                 <th>Due Date</th>
                                                 <th>Amount</th>
-                                                <th>Status</th>
+                                                <th>Payment Method</th>
                                                 <th>Processed By</th>
                                                 <th>Created By</th>
                                                 <th>Actions</th>
@@ -216,26 +214,29 @@ if ($pu) {
                                                     </td>
                                                     <td><?php echo isset($row['issue_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['issue_date']))) : ''; ?>
                                                     </td>
-                                                    <td><?php echo isset($row['due_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
+                                                    <td><?php echo (isset($row['due_date']) && !empty($row['due_date']) && $row['due_date'] !== '0000-00-00') ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
                                                     </td>
                                                     <td>
                                                         <?php
-                                                        $amount = isset($row['total_amount']) ? htmlspecialchars(number_format((float) $row['total_amount'], 2)) : '0.00';
+                                                        $totalAmt = isset($row['total_amount']) ? floatval($row['total_amount']) : 0;
+                                                        $paidAmt = isset($row['amount_paid']) ? floatval($row['amount_paid']) : 0;
                                                         $currency = isset($row['currency']) ? $row['currency'] : 'lkr';
                                                         $currencySymbol = ($currency == 'usd') ? '$' : 'Rs';
                                                         $payStatus = isset($row['pay_status']) ? $row['pay_status'] : 'unpaid';
 
-                                                        echo '<div class="amount-text">' . $amount . ' <span class="currency-symbol">(' . $currencySymbol . ')</span></div>';
+                                                        echo '<div class="amount-text">' . number_format($paidAmt, 2) . ' / ' . number_format($totalAmt, 2) . ' <span class="currency-symbol">(' . $currencySymbol . ')</span></div>';
 
                                                         if ($payStatus == 'paid'): ?>
                                                             <span class="badge-soft badge-soft-success mt-1">Paid</span>
+                                                        <?php elseif ($payStatus == 'partial'): ?>
+                                                            <span class="badge-soft badge-soft-warning mt-1">Partial</span>
                                                         <?php else: ?>
                                                             <span class="badge-soft badge-soft-danger mt-1">Unpaid</span>
                                                         <?php endif;
                                                         ?>
                                                     </td>
                                                     <td>
-                                                        <span class="badge-soft badge-soft-success">Complete</span>
+                                                        <?= htmlspecialchars($row['payment_method'] ?? 'N/A') ?>
                                                     </td>
                                                     <td>
                                                         <?php 
@@ -257,6 +258,7 @@ if ($pu) {
                                                     </td>
                                                     <td>
                                                         <div class="action-btn-group d-flex gap-1">
+                                                            <?php if (hasAccess('invoices.complete')): ?>
                                                             <a href="#" class="btn btn-view view-invoice"
                                                                 title="View Invoice"
                                                                 data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
@@ -276,6 +278,7 @@ if ($pu) {
                                                                 data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>">
                                                                 <i class="fas fa-receipt"></i>
                                                              </a>
+                                                             <?php endif; ?>
                                                              <?php endif; ?>
                                                          </div>
                                                     </td>

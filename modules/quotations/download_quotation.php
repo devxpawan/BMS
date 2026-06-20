@@ -39,10 +39,9 @@ $quotation = $result->fetch_assoc();
 $currency = 'lkr';
 $currencySymbol = 'LKR';
 
-$itemSql = "SELECT qi.*, p.name as product_name, qi.product_name as qi_product_name,
-            COALESCE(qi.description, p.description) as product_description
+$itemSql = "SELECT qi.*, qi.product_name as qi_product_name,
+            qi.description as product_description
             FROM quotation_items qi
-            LEFT JOIN products p ON qi.product_id = p.id
             WHERE qi.quotation_id = ?";
 
 $stmt = $conn->prepare($itemSql);
@@ -458,7 +457,7 @@ if (!empty($quotation['ref_no'])) {
             .quotation-container {
                 box-shadow: none;
                 padding: 0;
-                padding-bottom: 60px; /* space for the fixed footer */
+                padding-bottom: 60px;
                 margin: 0;
                 width: 100%;
                 max-width: 100%;
@@ -468,14 +467,56 @@ if (!empty($quotation['ref_no'])) {
                 display: none !important;
             }
 
-            .header-table, .info-table, .product-table, .totals-table-wrapper,
-            .amount-in-words-box, .validity-terms-box, .bank-details-box,
-            .signature-section {
+            .header-table, .info-table {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
 
+            .product-table {
+                font-size: 11px;
+            }
+
+            .product-table thead {
+                display: table-header-group;
+            }
+
+            .product-table thead tr {
+                background-color: #f8f9fa !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .product-table tbody tr {
+                page-break-inside: auto;
+                break-inside: auto;
+            }
+
             .product-table tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .totals-table-wrapper {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .amount-in-words-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .validity-terms-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .bank-details-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .signature-section {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
@@ -507,6 +548,9 @@ if (!empty($quotation['ref_no'])) {
 <?php endif; ?>
     <div class="quotation-container">
         <?php if ($showButtons): ?>
+            <div class="control-buttons">
+                <button onclick="window.print()" class="btn btn-primary">Print</button>
+            </div>
         <?php endif; ?>
 
         <!-- Header -->
@@ -551,6 +595,10 @@ if (!empty($quotation['ref_no'])) {
                 <td class="quote-meta-cell">
                     <strong>Date :</strong> <?php echo date('j/n/Y', strtotime($quotation['quotation_date'])); ?><br>
                     <strong>Ref No :</strong> <?php echo htmlspecialchars($ref_no); ?>
+                    <?php if (!empty($quotation['revision_no']) && $quotation['revision_no'] > 0): ?>
+                        <br><strong>Revision :</strong> R<?php echo $quotation['revision_no']; ?>
+                    <?php endif; ?>
+
                 </td>
             </tr>
         </table>
@@ -592,7 +640,7 @@ if (!empty($quotation['ref_no'])) {
                         <tr>
                             <td style="text-align: center;"><?php echo $i++; ?></td>
                             <td>
-                                <strong><?php echo htmlspecialchars($item['product_id'] ? $item['product_name'] : $item['qi_product_name']); ?></strong>
+                                <strong><?php echo htmlspecialchars($item['qi_product_name']); ?></strong>
                                 <?php if (!empty($item['product_description'])): ?>
                                     <br><span style="font-size: 11px; color: #555;"><?php echo nl2br(htmlspecialchars($item['product_description'])); ?></span>
                                 <?php endif; ?>
@@ -625,15 +673,17 @@ if (!empty($quotation['ref_no'])) {
                 <?php endif; ?>
                 <?php
                 $qvat = floatval($quotation['vat'] ?? 0);
-                $qvat_pct = 0;
-                if ($total_before_discounts > 0) {
-                    $qvat_pct = ($qvat / $total_before_discounts) * 100;
-                }
+                if ($qvat > 0):
+                    $qvat_pct = 0;
+                    if ($total_before_discounts > 0) {
+                        $qvat_pct = ($qvat / $total_before_discounts) * 100;
+                    }
                 ?>
-                <tr>
-                    <td>Vat (<?php echo number_format($qvat_pct, 1); ?>%)</td>
-                    <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($qvat, 2); ?></td>
-                </tr>
+                    <tr>
+                        <td>Vat (<?php echo number_format($qvat_pct, 1); ?>%)</td>
+                        <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($qvat, 2); ?></td>
+                    </tr>
+                <?php endif; ?>
                 <tr>
                     <td>Total</td>
                     <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($grand_total, 2); ?></td>
@@ -708,20 +758,21 @@ if (!empty($quotation['ref_no'])) {
                 </div>
             </div>
 
-            <!-- Footer (fixed to bottom of paper when printing) -->
-            <div class="print-footer">
-                <div class="footer-line"></div>
-                <div class="footer-text">
-                    <?php 
-                    $footer_addr = $company['address'] ? htmlspecialchars(str_replace("\n", ", ", $company['address'])) : '';
-                    echo $footer_addr;
-                    if (!empty($company['phone']) || !empty($company['email'])):
-                        echo "<br>";
-                        if ($company['phone']) echo "Hot line / Tel: " . htmlspecialchars($company['phone']) . " ";
-                        if ($company['email']) echo "| E-Mail: " . htmlspecialchars($company['email']) . " ";
-                    endif;
-                    ?>
-                </div>
+        </div>
+
+        <!-- Footer (fixed to bottom of paper when printing) -->
+        <div class="print-footer">
+            <div class="footer-line"></div>
+            <div class="footer-text">
+                <?php 
+                $footer_addr = $company['address'] ? htmlspecialchars(str_replace("\n", ", ", $company['address'])) : '';
+                echo $footer_addr;
+                if (!empty($company['phone']) || !empty($company['email'])):
+                    echo "<br>";
+                    if ($company['phone']) echo "Hot line / Tel: " . htmlspecialchars($company['phone']) . " ";
+                    if ($company['email']) echo "| E-Mail: " . htmlspecialchars($company['email']) . " ";
+                endif;
+                ?>
             </div>
         </div>
     </div>

@@ -13,27 +13,174 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
-// Admin-only access
-if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
-    header("Location: " . BASE_URL . "index.php");
-    exit();
-}
+
 
 // Include the database connection file
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
+function sendJsonResponse($data) {
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit();
+}
+
+$requestAction = isset($_POST['action']) ? $_POST['action'] : (isset($_GET['action']) ? $_GET['action'] : '');
+
+if ($requestAction === 'list_positions') {
+    $positionsResult = $conn->query("SELECT p.id, p.name, p.description, p.status, p.created_at, COUNT(u.id) AS user_count FROM positions p LEFT JOIN users u ON u.position_id = p.id GROUP BY p.id ORDER BY p.status ASC, p.name ASC");
+    $positions = [];
+
+    if ($positionsResult) {
+        while ($position = $positionsResult->fetch_assoc()) {
+            $positions[] = $position;
+        }
+    }
+
+    sendJsonResponse(['success' => true, 'positions' => $positions]);
+}
+
+if ($requestAction === 'list_position_users') {
+    $positionId = isset($_GET['position_id']) ? (int)$_GET['position_id'] : 0;
+    if ($positionId <= 0) {
+        sendJsonResponse(['success' => false, 'message' => 'Invalid position.']);
+    }
+
+    $stmt = $conn->prepare("SELECT u.id, u.name, u.username, u.email, u.mobile, u.status FROM users u WHERE u.position_id = ? ORDER BY u.name ASC");
+    $stmt->bind_param("i", $positionId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $users = [];
+    while ($row = $result->fetch_assoc()) {
+        $users[] = $row;
+    }
+    $stmt->close();
+
+    sendJsonResponse(['success' => true, 'users' => $users]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($requestAction, ['add_position', 'update_position', 'toggle_position'], true)) {
+    try {
+        if ($requestAction === 'add_position') {
+            $name = trim($_POST['position_name'] ?? '');
+            $description = trim($_POST['position_description'] ?? '');
+
+            if ($name === '') {
+                sendJsonResponse(['success' => false, 'message' => 'Position name is required.']);
+            }
+
+            if (strlen($name) > 100) {
+                sendJsonResponse(['success' => false, 'message' => 'Position name must be 100 characters or less.']);
+            }
+
+            $duplicateStmt = $conn->prepare("SELECT id FROM positions WHERE name = ?");
+            $duplicateStmt->bind_param("s", $name);
+            $duplicateStmt->execute();
+            if ($duplicateStmt->get_result()->num_rows > 0) {
+                $duplicateStmt->close();
+                sendJsonResponse(['success' => false, 'message' => 'Position already exists.']);
+            }
+            $duplicateStmt->close();
+
+            $stmt = $conn->prepare("INSERT INTO positions (name, description, status) VALUES (?, ?, 'active')");
+            $stmt->bind_param("ss", $name, $description);
+            $stmt->execute();
+            $positionId = $conn->insert_id;
+            $stmt->close();
+
+            sendJsonResponse([
+                'success' => true,
+                'message' => 'Position added successfully.',
+                'position' => [
+                    'id' => $positionId,
+                    'name' => $name,
+                    'description' => $description,
+                    'status' => 'active'
+                ]
+            ]);
+        }
+
+        if ($requestAction === 'update_position') {
+            $positionId = intval($_POST['position_id'] ?? 0);
+            $name = trim($_POST['position_name'] ?? '');
+            $description = trim($_POST['position_description'] ?? '');
+
+            if ($positionId <= 0) {
+                sendJsonResponse(['success' => false, 'message' => 'Invalid position.']);
+            }
+
+            if ($name === '') {
+                sendJsonResponse(['success' => false, 'message' => 'Position name is required.']);
+            }
+
+            if (strlen($name) > 100) {
+                sendJsonResponse(['success' => false, 'message' => 'Position name must be 100 characters or less.']);
+            }
+
+            $checkStmt = $conn->prepare("SELECT id FROM positions WHERE id = ?");
+            $checkStmt->bind_param("i", $positionId);
+            $checkStmt->execute();
+            if ($checkStmt->get_result()->num_rows === 0) {
+                $checkStmt->close();
+                sendJsonResponse(['success' => false, 'message' => 'Position not found.']);
+            }
+            $checkStmt->close();
+
+            $duplicateStmt = $conn->prepare("SELECT id FROM positions WHERE name = ? AND id != ?");
+            $duplicateStmt->bind_param("si", $name, $positionId);
+            $duplicateStmt->execute();
+            if ($duplicateStmt->get_result()->num_rows > 0) {
+                $duplicateStmt->close();
+                sendJsonResponse(['success' => false, 'message' => 'Position already exists.']);
+            }
+            $duplicateStmt->close();
+
+            $stmt = $conn->prepare("UPDATE positions SET name = ?, description = ? WHERE id = ?");
+            $stmt->bind_param("ssi", $name, $description, $positionId);
+            $stmt->execute();
+            $stmt->close();
+
+            sendJsonResponse([
+                'success' => true,
+                'message' => 'Position updated successfully.',
+                'position' => [
+                    'id' => $positionId,
+                    'name' => $name,
+                    'description' => $description
+                ]
+            ]);
+        }
+
+        if ($requestAction === 'toggle_position') {
+            $positionId = intval($_POST['position_id'] ?? 0);
+            $newStatus = $_POST['new_status'] ?? '';
+
+            if ($positionId <= 0 || !in_array($newStatus, ['active', 'inactive'], true)) {
+                sendJsonResponse(['success' => false, 'message' => 'Invalid position status.']);
+            }
+
+            $stmt = $conn->prepare("UPDATE positions SET status = ? WHERE id = ?");
+            $stmt->bind_param("si", $newStatus, $positionId);
+            $stmt->execute();
+            $stmt->close();
+
+            sendJsonResponse([
+                'success' => true,
+                'message' => 'Position status updated successfully.',
+                'position' => [
+                    'id' => $positionId,
+                    'status' => $newStatus
+                ]
+            ]);
+        }
+    } catch (Exception $e) {
+        sendJsonResponse(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+    }
+}
+
         // Handle user status update via AJAX if it's a POST request
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
             $response = ['success' => false, 'message' => 'Unknown error'];
-
-            // Only admin can update user status
-            if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
-                $response = ['success' => false, 'message' => 'Access denied. Admin privileges required.'];
-                header('Content-Type: application/json');
-                echo json_encode($response);
-                exit();
-            }
 
             if (isset($_POST['user_id']) && isset($_POST['new_status'])) {
                 $user_id = intval($_POST['user_id']);
@@ -138,17 +285,10 @@ require_once BASE_PATH . 'includes/functions.php';
     exit();
 }
 
-// Get current user's role_id from session
-$current_user_role = isset($_SESSION['role_id']) ? $_SESSION['role_id'] : 0;
-
-// Check if user is admin (role_id = 1)
-$is_admin = ($current_user_role == 1);
-
 // Initialize filter parameters
 $filter_name = isset($_GET['filter_name']) ? trim($_GET['filter_name']) : '';
 $filter_email = isset($_GET['filter_email']) ? trim($_GET['filter_email']) : '';
 $filter_mobile = isset($_GET['filter_mobile']) ? trim($_GET['filter_mobile']) : '';
-$filter_role = isset($_GET['filter_role']) ? (int)$_GET['filter_role'] : 0;
 $filter_position = isset($_GET['filter_position']) ? (int)$_GET['filter_position'] : 0;
 $filter_status = isset($_GET['filter_status']) ? trim($_GET['filter_status']) : '';
 $limit = 10;
@@ -169,9 +309,6 @@ if (!empty($filter_mobile)) {
     $s = $conn->real_escape_string($filter_mobile);
     $conditions[] = "u.mobile LIKE '%$s%'";
 }
-if ($filter_role > 0) {
-    $conditions[] = "u.role_id = $filter_role";
-}
 if ($filter_position > 0) {
     $conditions[] = "u.position_id = $filter_position";
 }
@@ -185,19 +322,14 @@ if (!empty($conditions)) {
     $whereConditions = ' AND ' . implode(' AND ', $conditions);
 }
 
-// Fetch roles and positions for filter dropdowns
-$rolesResult = $conn->query("SELECT id, name FROM roles ORDER BY name");
+// Fetch positions for filter dropdowns
 $positionsResult = $conn->query("SELECT id, name FROM positions ORDER BY name");
 
 // Build base query parts
-$baseFrom = "FROM users u JOIN roles r ON u.role_id = r.id LEFT JOIN positions p ON u.position_id = p.id";
-$selectCols = "u.*, r.name AS role_name, p.name AS position_name";
+$baseFrom = "FROM users u LEFT JOIN positions p ON u.position_id = p.id";
+$selectCols = "u.*, p.name AS position_name";
 
-if ($is_admin) {
-    $baseWhere = "1=1";
-} else {
-    $baseWhere = "u.role_id != 1";
-}
+$baseWhere = "1=1";
 
 $whereClause = $baseWhere . $whereConditions;
 
@@ -236,6 +368,9 @@ $result = $conn->query($sql);
                         <h5>Users List</h5>
                         <p class="text-muted">Manage and review all system users</p>
                     </div>
+                    <button type="button" class="btn btn-primary btn-manage-positions" id="openPositionManagementModal">
+                        <i class="fas fa-briefcase me-1"></i> Manage Positions
+                    </button>
                 </div>
 
                     <div class="card invoice-card mb-4">
@@ -258,15 +393,6 @@ $result = $conn->query($sql);
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Phone</label>
                                             <input type="text" name="filter_mobile" class="form-control" placeholder="Phone Number"
                                                 value="<?= htmlspecialchars($filter_mobile) ?>">
-                                        </div>
-                                        <div class="col-md-2 col-lg-1">
-                                            <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Role</label>
-                                            <select name="filter_role" class="form-select">
-                                                <option value="0">All</option>
-                                                <?php if ($rolesResult): while ($role = $rolesResult->fetch_assoc()): ?>
-                                                    <option value="<?= $role['id'] ?>" <?= $filter_role == $role['id'] ? 'selected' : '' ?>><?= htmlspecialchars($role['name']) ?></option>
-                                                <?php endwhile; endif; ?>
-                                            </select>
                                         </div>
                                         <div class="col-md-2 col-lg-1">
                                             <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:#667085;">Position</label>
@@ -308,8 +434,7 @@ $result = $conn->query($sql);
                                             <th>User ID</th>
                                             <th>Name</th>
                                             <th>Username</th>
-                                            <th>Email</th>
-                                            <th>Mobile</th>
+                                            <th>Contact</th>
                                             <th>Position</th>
                                             <th>Status</th>
                                             <th>Actions</th>
@@ -325,12 +450,15 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td>
                                                         <div class="user-name"><?= htmlspecialchars($row['name']) ?></div>
-                                                        <div class="user-role"><?= htmlspecialchars($row['role_name']) ?></div>
                                                     </td>
                                                     <td><?= htmlspecialchars($row['username']) ?></td>
-                                                    <td><?= htmlspecialchars($row['email']) ?></td>
-                                                    <td><?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?></td>
                                                     <td>
+                                                        <div><i class="fas fa-phone me-1 text-muted"></i><?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?></div>
+                                                        <?php if (!empty($row['email'])): ?>
+                                                            <div class="text-muted" style="font-size: 0.82rem;"><i class="fas fa-envelope me-1"></i><?= htmlspecialchars($row['email']) ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                     <td>
                                                         <?php if (!empty($row['position_name'])): ?>
                                                             <span class="badge badge-soft badge-soft-info"><?= htmlspecialchars($row['position_name']) ?></span>
                                                         <?php else: ?>
@@ -346,11 +474,22 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td>
                                                         <div class="action-btn-group d-flex gap-1">
-                                                            <a href="<?= BASE_URL ?>modules/users/edit_user.php?id=<?= htmlspecialchars($row['id']) ?>&name=<?= urlencode($row['name']) ?>&username=<?= urlencode($row['username']) ?>&email=<?= urlencode($row['email']) ?>&status=<?= htmlspecialchars($row['status']) ?>&role=<?= urlencode($row['role_name']) ?>"
+                                                            <?php if (hasAccess('users.add')): ?>
+                                                            <a href="<?= BASE_URL ?>modules/users/edit_user.php?id=<?= htmlspecialchars($row['id']) ?>&name=<?= urlencode($row['name']) ?>&username=<?= urlencode($row['username']) ?>&email=<?= urlencode($row['email']) ?>&status=<?= htmlspecialchars($row['status']) ?>"
                                                                 class="btn btn-edit"
                                                                 title="Edit User">
                                                                 <i class="fas fa-pen"></i>
                                                             </a>
+                                                            <?php endif; ?>
+                                                            <?php if (hasAccess('users.permissions')): ?>
+                                                            <a href="<?= BASE_URL ?>modules/users/edit_permissions.php?id=<?= $row['id'] ?>"
+                                                                class="btn btn-edit"
+                                                                title="Manage Permissions"
+                                                                style="color: #6366f1; border-color: rgba(99, 102, 241, 0.2); background: rgba(99, 102, 241, 0.05);">
+                                                                <i class="fas fa-shield-alt"></i>
+                                                            </a>
+                                                            <?php endif; ?>
+                                                            <?php if (hasAccess('users')): ?>
                                                             <button class="btn btn-view view-user-btn"
                                                                 title="View Details"
                                                                 data-user-id="<?= $row['id'] ?>"
@@ -360,12 +499,12 @@ $result = $conn->query($sql);
                                                                 data-user-mobile="<?= isset($row['mobile']) ? htmlspecialchars($row['mobile']) : 'N/A' ?>"
                                                                 data-user-nic="<?= isset($row['nic']) ? htmlspecialchars($row['nic']) : 'N/A' ?>"
                                                                 data-user-status="<?= htmlspecialchars($row['status']) ?>"
-                                                                data-user-role="<?= htmlspecialchars($row['role_name']) ?>"
-                                                                data-user-role-id="<?= htmlspecialchars($row['role_id']) ?>"
-                                                                data-user-position="<?= isset($row['position_name']) ? htmlspecialchars($row['position_name']) : 'N/A' ?>"
+                                                                 data-user-position="<?= isset($row['position_name']) ? htmlspecialchars($row['position_name']) : 'N/A' ?>"
                                                                 data-user-created="<?= htmlspecialchars($row['created_at']) ?>">
                                                                 <i class="fas fa-eye"></i>
                                                             </button>
+                                                            <?php endif; ?>
+                                                            <?php if (hasAccess('users.add')): ?>
                                                             <button class="btn <?= $row['status'] == 'active' ? 'btn-deactivate' : 'btn-activate' ?> toggle-status-btn"
                                                                 title="<?= $row['status'] == 'active' ? 'Deactivate' : 'Activate' ?>"
                                                                 data-user-id="<?= $row['id'] ?>"
@@ -373,12 +512,13 @@ $result = $conn->query($sql);
                                                                 data-user-name="<?= htmlspecialchars($row['name']) ?>">
                                                                 <i class="fas <?= $row['status'] == 'active' ? 'fa-ban' : 'fa-check' ?>"></i>
                                                             </button>
+                                                            <?php endif; ?>
                                                         </div>
                                                     </td>
                                                 </tr>
                                             <?php endwhile; ?>
                                         <?php else: ?>
-                                            <tr>
+                                             <tr>
                                                 <td colspan="8" class="text-center py-4">
                                                     <div class="empty-state">
                                                         <i class="fas fa-users"></i>
@@ -428,6 +568,68 @@ $result = $conn->query($sql);
         </div>
     </div>
 
+    <!-- Position Management Modal -->
+    <div class="modal fade" id="positionManagementModal" tabindex="-1" aria-labelledby="positionManagementModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="positionManagementModalLabel"><i class="fas fa-briefcase me-2"></i>Position Management</h5>
+                        <p class="text-muted small mb-0">Add, edit, activate, or deactivate user positions.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="positionForm" class="mb-4">
+                        <input type="hidden" id="positionId" name="position_id" value="">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-5">
+                                <label for="positionName" class="form-label">Position Name</label>
+                                <input type="text" id="positionName" name="position_name" class="form-control" maxlength="100" placeholder="e.g. Manager" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label for="positionDescription" class="form-label">Description</label>
+                                <input type="text" id="positionDescription" name="position_description" class="form-control" placeholder="Optional description">
+                            </div>
+                            <div class="col-md-2 d-flex gap-2">
+                                <button type="submit" class="btn btn-primary flex-fill" id="savePositionBtn">
+                                    <i class="fas fa-plus me-1"></i> Add
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="cancelPositionFormBtn">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text position-form-status" id="positionFormStatus">Add a new position.</div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-users position-modal-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Description</th>
+                                    <th>Users</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsTableBody">
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 
     <script src="<?= BASE_URL ?>js/scripts.js"></script>
@@ -450,8 +652,6 @@ $result = $conn->query($sql);
                     mobile: this.getAttribute('data-user-mobile'),
                     nic: this.getAttribute('data-user-nic'),
                     status: this.getAttribute('data-user-status'),
-                    role: this.getAttribute('data-user-role'),
-                    roleId: this.getAttribute('data-user-role-id'),
                     position: this.getAttribute('data-user-position'),
                     created: this.getAttribute('data-user-created')
                 };
@@ -499,6 +699,260 @@ $result = $conn->query($sql);
 
                 viewUserModal.show();
             });
+        });
+
+        const positionModal = new bootstrap.Modal(document.getElementById('positionManagementModal'));
+        const positionForm = document.getElementById('positionForm');
+        const positionsTableBody = document.getElementById('positionsTableBody');
+        const positionName = document.getElementById('positionName');
+        const positionDescription = document.getElementById('positionDescription');
+        const positionId = document.getElementById('positionId');
+        const savePositionBtn = document.getElementById('savePositionBtn');
+        const positionFormStatus = document.getElementById('positionFormStatus');
+
+        function resetPositionForm() {
+            positionForm.reset();
+            positionId.value = '';
+            savePositionBtn.innerHTML = '<i class="fas fa-plus me-1"></i> Add';
+            positionFormStatus.textContent = 'Add a new position.';
+        }
+
+        function showPositionLoading() {
+            positionsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function showPositionMessage(message, isError = false) {
+            positionsTableBody.innerHTML = '';
+
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 5;
+            cell.className = `text-center py-4 ${isError ? 'text-danger' : 'text-muted'}`;
+            cell.textContent = message;
+            row.appendChild(cell);
+            positionsTableBody.appendChild(row);
+        }
+
+        function updatePositionFilterOptions(positions) {
+            const filterSelect = document.querySelector('select[name="filter_position"]');
+            if (!filterSelect) return;
+
+            const currentValue = filterSelect.value;
+            filterSelect.innerHTML = '';
+
+            const allOption = document.createElement('option');
+            allOption.value = '0';
+            allOption.textContent = 'All';
+            filterSelect.appendChild(allOption);
+
+            positions.forEach(position => {
+                const option = document.createElement('option');
+                option.value = position.id;
+                option.textContent = position.name;
+                filterSelect.appendChild(option);
+            });
+
+            if (Array.from(filterSelect.options).some(option => option.value === currentValue)) {
+                filterSelect.value = currentValue;
+            }
+        }
+
+        async function fetchPositions() {
+            showPositionLoading();
+
+            try {
+                const response = await fetch('<?= BASE_URL ?>modules/users/users.php?action=list_positions', {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Failed to load positions.');
+                }
+
+                renderPositions(data.positions || []);
+                updatePositionFilterOptions(data.positions || []);
+            } catch (error) {
+                showPositionMessage(error.message || 'Failed to load positions.', true);
+                showToast('error', error.message || 'Failed to load positions.');
+            }
+        }
+
+        function renderPositions(positions) {
+            positionsTableBody.innerHTML = '';
+
+            if (!positions.length) {
+                showPositionMessage('No positions found.');
+                return;
+            }
+
+            positions.forEach(position => {
+                const row = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                const nameText = document.createElement('strong');
+                nameText.textContent = position.name;
+                nameCell.appendChild(nameText);
+
+                const descriptionCell = document.createElement('td');
+                descriptionCell.textContent = position.description || '—';
+
+                const usersCell = document.createElement('td');
+                const usersCount = document.createElement('span');
+                usersCount.className = 'fw-semibold';
+                usersCount.textContent = position.user_count || 0;
+                usersCell.appendChild(usersCount);
+
+                const statusCell = document.createElement('td');
+                const statusBadge = document.createElement('span');
+                statusBadge.className = `badge-soft ${position.status === 'active' ? 'badge-soft-success' : 'badge-soft-danger'}`;
+                statusBadge.textContent = position.status === 'active' ? 'Active' : 'Inactive';
+                statusCell.appendChild(statusBadge);
+
+                const actionCell = document.createElement('td');
+                actionCell.className = 'position-actions';
+
+                const editButton = document.createElement('button');
+                editButton.type = 'button';
+                editButton.className = 'btn btn-edit btn-sm';
+                editButton.title = 'Edit Position';
+                editButton.innerHTML = '<i class="fas fa-pen"></i>';
+                editButton.addEventListener('click', () => {
+                    positionId.value = position.id;
+                    positionName.value = position.name;
+                    positionDescription.value = position.description || '';
+                    savePositionBtn.innerHTML = '<i class="fas fa-save me-1"></i> Update';
+                    positionFormStatus.textContent = 'Editing position.';
+                    positionName.focus();
+                });
+
+                const toggleButton = document.createElement('button');
+                const nextStatus = position.status === 'active' ? 'inactive' : 'active';
+                toggleButton.type = 'button';
+                toggleButton.className = `btn ${nextStatus === 'active' ? 'btn-activate' : 'btn-deactivate'} btn-sm`;
+                toggleButton.title = nextStatus === 'active' ? 'Activate Position' : 'Deactivate Position';
+                toggleButton.innerHTML = `<i class="fas ${nextStatus === 'active' ? 'fa-check' : 'fa-ban'}"></i>`;
+                toggleButton.addEventListener('click', () => {
+                    const actionText = nextStatus === 'active' ? 'activate' : 'deactivate';
+                    Swal.fire({
+                        title: `${nextStatus === 'active' ? 'Activate' : 'Deactivate'} position?`,
+                        html: `You are about to <strong>${actionText}</strong> <strong>${position.name}</strong>.`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: nextStatus === 'active' ? '#079455' : '#d33',
+                        cancelButtonColor: '#6c757d',
+                        confirmButtonText: `Yes, ${actionText} position`,
+                        cancelButtonText: 'Cancel'
+                    }).then(async (result) => {
+                        if (!result.isConfirmed) return;
+
+                        Swal.fire({
+                            title: 'Processing...',
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        try {
+                            const data = await submitPositionForm('toggle_position', {
+                                position_id: position.id,
+                                new_status: nextStatus
+                            });
+                            // Close the processing Swal before showing the toast
+                            Swal.close();
+                            await fetchPositions();
+                            showToast('success', data.message);
+                        } catch (error) {
+                            showToast('error', error.message || 'Failed to update position status.');
+                        }
+                    });
+                });
+
+                actionCell.append(editButton, toggleButton);
+                row.append(nameCell, descriptionCell, usersCell, statusCell, actionCell);
+                positionsTableBody.appendChild(row);
+            });
+        }
+
+        async function submitPositionForm(action, payload) {
+            const formData = new FormData();
+            formData.append('action', action);
+
+            Object.keys(payload).forEach(key => {
+                formData.append(key, payload[key]);
+            });
+
+            const response = await fetch('<?= BASE_URL ?>modules/users/users.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to save position.');
+            }
+
+            return data;
+        }
+
+        document.getElementById('openPositionManagementModal').addEventListener('click', () => {
+            resetPositionForm();
+            positionModal.show();
+            fetchPositions();
+        });
+
+        document.getElementById('positionManagementModal').addEventListener('hidden.bs.modal', resetPositionForm);
+
+        document.getElementById('cancelPositionFormBtn').addEventListener('click', resetPositionForm);
+
+        positionForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            if (!positionName.value.trim()) {
+                showToast('warning', 'Position name is required.');
+                positionName.focus();
+                return;
+            }
+
+            const action = positionId.value ? 'update_position' : 'add_position';
+            const payload = {
+                position_name: positionName.value.trim(),
+                position_description: positionDescription.value.trim()
+            };
+
+            if (positionId.value) {
+                payload.position_id = positionId.value;
+            }
+
+            Swal.fire({
+                title: 'Processing...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            try {
+                const data = await submitPositionForm(action, payload);
+                // Close the processing Swal before showing the toast
+                Swal.close();
+                resetPositionForm();
+                await fetchPositions();
+                showToast('success', data.message);
+            } catch (error) {
+                showToast('error', error.message || 'Failed to save position.');
+            }
         });
 
         // Status Toggle Handling
@@ -555,6 +1009,9 @@ $result = $conn->query($sql);
                         })
                         .then(response => response.json())
                         .then(data => {
+                            // Close the processing Swal first
+                            Swal.close();
+
                             if (data.success) {
                                 // Update button and badge
                                 const userRow = document.getElementById(`user-row-${userId}`);
@@ -588,6 +1045,8 @@ $result = $conn->query($sql);
                             }
                         })
                         .catch(error => {
+                            // Close the processing Swal first
+                            Swal.close();
                             console.error('Error:', error);
                             showToast('error', 'An error occurred while updating user status');
                         });

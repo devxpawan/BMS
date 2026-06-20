@@ -28,25 +28,11 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit(); // Stop execution immediately
 }
 
-// Admin-only access
-if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
-    header("Location: " . BASE_URL . "index.php");
-    exit();
-}
+
 
 // Initialize error message variable
 $errorMsg = '';
 $successMsg = '';
-
-// Fetch available roles dynamically
-$roles = [];
-$roleQuery = "SELECT id, name FROM roles";
-$roleResult = $conn->query($roleQuery);
-
-// Collect roles into an array
-while ($roleRow = $roleResult->fetch_assoc()) {
-    $roles[] = $roleRow;
-}
 
 // Fetch available positions dynamically
 $positions = [];
@@ -75,23 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $nic = trim(filter_input(INPUT_POST, 'nic', FILTER_SANITIZE_SPECIAL_CHARS));
         $address = trim(filter_input(INPUT_POST, 'address', FILTER_SANITIZE_SPECIAL_CHARS));
         $status = 'active';
-        $role_id = filter_input(INPUT_POST, 'role_id', FILTER_VALIDATE_INT) ?: 0;
         $position_id = filter_input(INPUT_POST, 'position_id', FILTER_VALIDATE_INT) ?: null;
-        if (empty($position_id)) $position_id = null;
 
         // Input validation
         $errors = [];
         if (empty($name)) {
             $errors[] = "Name is required.";
         }
+        if (empty($position_id)) {
+            $errors[] = "Position is required.";
+        }
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Invalid email address.";
         }
         if (!empty($mobile) && !preg_match('/^[0-9]{10}$/', $mobile)) {
             $errors[] = "Invalid mobile number.";
-        }
-        if (empty($role_id)) {
-            $errors[] = "Role selection is required.";
         }
 
         // Password handling
@@ -130,24 +114,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->close();
         }
 
+        // Check for duplicate NIC
+        if (!empty($nic)) {
+            $stmt = $conn->prepare("SELECT id FROM users WHERE nic = ?");
+            $stmt->bind_param("s", $nic);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result->num_rows > 0) {
+                $errors[] = "NIC number already in use.";
+            }
+            $stmt->close();
+        }
+
+        // Check for duplicate mobile
+        if (!empty($mobile)) {
+            $stmt = $conn->prepare("SELECT id FROM users WHERE mobile = ?");
+            $stmt->bind_param("s", $mobile);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result->num_rows > 0) {
+                $errors[] = "Mobile number already in use.";
+            }
+            $stmt->close();
+        }
+
         if (!empty($errors)) {
             $errorMsg = implode("<br>", $errors);
         } else {
             $conn->begin_transaction();
             if (!empty($password)) {
                 $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, password, created_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssssssiss",
+                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, position_id, password, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssssssss",
                     $name, $username, $email, $mobile, $nic, $address,
-                    $status, $role_id, $position_id, $hashed_password
+                    $status, $position_id, $hashed_password
                 );
             } else {
-                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, role_id, position_id, created_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssssssii",
+                $stmt = $conn->prepare("INSERT INTO users (name, username, email, mobile, nic, address, status, position_id, created_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssssssi",
                     $name, $username, $email, $mobile, $nic, $address,
-                    $status, $role_id, $position_id
+                    $status, $position_id
                 );
             }
 
@@ -183,17 +191,7 @@ if (isset($_SESSION['success_message'])) {
     <!-- Select2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
-    <style>
-        body {
-            background-color: #f8fafc;
-        }
-
-        .form-floating .form-control {
-            height: calc(3.5rem + 2px);
-        }
-        
-        /* Email validation specific */
-    </style>
+    <style></style>
 </head>
 
 <body class="sb-nav-fixed">
@@ -229,7 +227,7 @@ if (isset($_SESSION['success_message'])) {
                 <!-- User Details Section -->
                 <div class="col-md-6">
                     <div class="premium-section-header">
-                        <i class="fas fa-user-circle me-2"></i> User Details
+                        <i class="fas fa-user-circle"></i> User Details
                     </div>
 
                         <!-- Name Field -->
@@ -282,7 +280,7 @@ if (isset($_SESSION['success_message'])) {
                                     <!-- Configuration Details Section -->
                                     <div class="col-md-6">
                                         <div class="premium-section-header">
-                                            <i class="fas fa-user-shield me-2"></i> Configuration Details
+                                            <i class="fas fa-user-shield"></i> Configuration Details
                                         </div>
                                         <!-- NIC Field -->
                                         <div class="mb-3">
@@ -300,25 +298,11 @@ if (isset($_SESSION['success_message'])) {
                                             <div class="error-feedback" id="address-error"></div>
                                         </div>
 
-                                        <!-- Role Field - Dynamically Populated -->
-                                        <div class="mb-3">
-                                            <label for="role_id" class="form-label">Role</label>
-                                            <select class="form-select" id="role_id" name="role_id" required>
-                                                <option value="" selected>Select Role...</option>
-                                                <?php foreach ($roles as $role): ?>
-                                                    <option value="<?= htmlspecialchars($role['id']) ?>">
-                                                        <?= htmlspecialchars($role['name']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <div class="error-feedback" id="role-error"></div>
-                                        </div>
-
                                         <!-- Position Field - Dynamically Populated -->
                                         <div class="mb-3">
-                                            <label for="position_id" class="form-label">Position</label>
-                                            <select class="form-select" id="position_id" name="position_id">
-                                                <option value="" selected>Select Position (Optional)...</option>
+                                            <label for="position_id" class="form-label">Position <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="position_id" name="position_id" required>
+                                                <option value="" selected>Select Position...</option>
                                                 <?php foreach ($positions as $position): ?>
                                                     <option value="<?= htmlspecialchars($position['id']) ?>">
                                                         <?= htmlspecialchars($position['name']) ?>
@@ -331,12 +315,12 @@ if (isset($_SESSION['success_message'])) {
 
                                 <!-- Submit Button -->
                                 <div class="row mt-4 pt-3 border-top">
-                                    <div class="col-12 d-flex justify-content-end gap-3">
+                                    <div class="col-12 d-flex justify-content-end gap-2">
                                         <a href="<?= BASE_URL ?>modules/users/users.php" class="back-btn text-decoration-none d-flex align-items-center">
-                                            <i class="fas fa-arrow-left me-2"></i> Cancel
+                                            <i class="fas fa-arrow-left me-1"></i> Cancel
                                         </a>
                                         <button type="submit" class="save-btn" id="submitBtn">
-                                            <i class="fas fa-save me-2"></i> Add User
+                                            <i class="fas fa-save me-1"></i> Add User
                                         </button>
                                     </div>
                                 </div>
@@ -357,12 +341,6 @@ if (isset($_SESSION['success_message'])) {
     <script>
     // Initialize Select2
     $(document).ready(function() {
-        $('#role_id').select2({
-            theme: 'bootstrap-5',
-            width: '100%',
-            minimumResultsForSearch: Infinity
-        });
-
         $('#position_id').select2({
             theme: 'bootstrap-5',
             width: '100%',
@@ -655,9 +633,9 @@ function validatePassword(password) {
     }
 
     // Real-time availability check via AJAX
-    function checkFieldAvailability(endpoint, paramName, value, callback) {
+    function checkFieldAvailability(fieldName, paramName, value, callback) {
         const xhr = new XMLHttpRequest();
-        xhr.open('GET', '<?= BASE_URL ?>modules/api/' + endpoint + '?' + paramName + '=' + encodeURIComponent(value), true);
+        xhr.open('GET', '<?= BASE_URL ?>modules/api/check_field.php?field=' + fieldName + '&' + paramName + '=' + encodeURIComponent(value), true);
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4 && xhr.status === 200) {
@@ -670,21 +648,6 @@ function validatePassword(password) {
             }
         };
         xhr.send();
-    }
-
-    // Role validation function
-    function validateRole(roleId) {
-        if (roleId.trim() === '') {
-            return {
-                valid: false,
-                message: 'Please select a role'
-            };
-        }
-        
-        return {
-            valid: true,
-            message: ''
-        };
     }
 
     // Setup validation for input fields with real-time feedback
@@ -770,8 +733,6 @@ function validatePassword(password) {
     const validateMobileField = setupValidation('mobile', validateMobile, 'mobile-error');
     const validateNICField = setupValidation('nic', validateNIC, 'nic-error');
     const validateAddressField = setupValidation('address', validateAddress, 'address-error');
-    const validateRoleField = setupValidation('role_id', validateRole, 'role-error');
-
     // Enhanced username validation with real-time availability check
     const usernameInput = document.getElementById('username');
     const usernameError = document.getElementById('username-error');
@@ -808,7 +769,7 @@ function validatePassword(password) {
             }
 
             // Check availability via AJAX
-            checkFieldAvailability('check_username.php', 'username', value, function(response) {
+            checkFieldAvailability('username', 'username', value, function(response) {
                 usernameChecked = true;
                 if (response.available) {
                     usernameInput.classList.add('is-valid');
@@ -913,7 +874,7 @@ function validatePassword(password) {
             }
 
             // Check availability via AJAX
-            checkFieldAvailability('check_email.php', 'email', value, function(response) {
+            checkFieldAvailability('email', 'email', value, function(response) {
                 emailChecked = true;
                 if (response.available) {
                     emailInput.classList.add('is-valid');
@@ -944,6 +905,140 @@ function validatePassword(password) {
         validateEmailFieldAsync();
     });
 
+    // Enhanced NIC validation with real-time availability check
+    const nicInput = document.getElementById('nic');
+    const nicError = document.getElementById('nic-error');
+    let nicAvailable = false;
+    let nicChecked = false;
+    let nicCheckTimer;
+
+    const validateNICFieldAsync = function() {
+        return new Promise((resolve) => {
+            const value = nicInput.value.trim();
+            nicInput.classList.remove('is-invalid');
+            nicInput.classList.remove('is-valid');
+            nicError.style.display = 'none';
+
+            // Empty check (NIC is optional)
+            if (value === '') {
+                nicInput.classList.remove('is-valid');
+                nicInput.classList.remove('is-invalid');
+                nicAvailable = true;
+                nicChecked = true;
+                resolve(true);
+                return;
+            }
+
+            // Format check (use existing validateNIC)
+            const formatResult = validateNIC(value);
+            if (!formatResult.valid) {
+                nicInput.classList.add('is-invalid');
+                nicError.textContent = formatResult.message;
+                nicError.style.display = 'block';
+                nicChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Check availability via AJAX
+            checkFieldAvailability('nic', 'nic', value, function(response) {
+                nicChecked = true;
+                if (response.available) {
+                    nicInput.classList.add('is-valid');
+                    nicAvailable = true;
+                    resolve(true);
+                } else {
+                    nicInput.classList.add('is-invalid');
+                    nicError.textContent = response.message || 'NIC number is already in use';
+                    nicError.style.display = 'block';
+                    nicAvailable = false;
+                    resolve(false);
+                }
+            });
+        });
+    };
+
+    // Real-time NIC checking as user types (with debounce)
+    nicInput.addEventListener('input', function() {
+        clearTimeout(nicCheckTimer);
+        nicCheckTimer = setTimeout(() => {
+            validateNICFieldAsync();
+        }, 600);
+    });
+
+    // Check on blur
+    nicInput.addEventListener('blur', function() {
+        clearTimeout(nicCheckTimer);
+        validateNICFieldAsync();
+    });
+
+    // Enhanced mobile validation with real-time availability check
+    let mobileAvailable = false;
+    let mobileChecked = false;
+    let mobileCheckTimer;
+
+    const mobileError = document.getElementById('mobile-error');
+
+    const validateMobileFieldAsync = function() {
+        return new Promise((resolve) => {
+            const value = mobileInput.value.replace(/\D/g, ''); // Ensure digits only
+            mobileInput.classList.remove('is-invalid');
+            mobileInput.classList.remove('is-valid');
+            mobileError.style.display = 'none';
+
+            // Empty check (mobile is optional)
+            if (value === '') {
+                mobileInput.classList.remove('is-valid');
+                mobileInput.classList.remove('is-invalid');
+                mobileAvailable = true;
+                mobileChecked = true;
+                resolve(true);
+                return;
+            }
+
+            // Format check
+            const formatResult = validateMobile(mobileInput.value); // Use original input value
+            if (!formatResult.valid) {
+                mobileInput.classList.add('is-invalid');
+                mobileError.textContent = formatResult.message;
+                mobileError.style.display = 'block';
+                mobileChecked = false;
+                resolve(false);
+                return;
+            }
+
+            // Check availability via AJAX
+            checkFieldAvailability('mobile', 'mobile', value, function(response) {
+                mobileChecked = true;
+                if (response.available) {
+                    mobileInput.classList.add('is-valid');
+                    mobileAvailable = true;
+                    resolve(true);
+                } else {
+                    mobileInput.classList.add('is-invalid');
+                    mobileError.textContent = response.message || 'Mobile number is already in use';
+                    mobileError.style.display = 'block';
+                    mobileAvailable = false;
+                    resolve(false);
+                }
+            });
+        });
+    };
+
+    // Real-time mobile checking as user types (with debounce)
+    mobileInput.addEventListener('input', function() {
+        clearTimeout(mobileCheckTimer);
+        mobileCheckTimer = setTimeout(() => {
+            validateMobileFieldAsync();
+        }, 600);
+    });
+
+    // Check on blur
+    mobileInput.addEventListener('blur', function() {
+        clearTimeout(mobileCheckTimer);
+        validateMobileFieldAsync();
+    });
+
     // Client-side form validation
     document.getElementById('addUserForm').addEventListener('submit', function(event) {
         let isValid = true;
@@ -951,11 +1046,9 @@ function validatePassword(password) {
         // Validate all fields
         if (!validateNameField()) isValid = false;
         if (!validatePasswordField()) isValid = false;
-        if (!validateMobileField()) isValid = false;
+        if (!validateMobileField()) isValid = false; // Synchronous check
         if (!validateNICField()) isValid = false;
         if (!validateAddressField()) isValid = false;
-        if (!validateRoleField()) isValid = false;
-
         // Synchronous checks for email and username formats
         const emailVal = emailInput.value.trim().toLowerCase();
         const emailFormatResult = validateEmail(emailVal);
@@ -982,16 +1075,20 @@ function validatePassword(password) {
             return;
         }
 
-        // Check async validations (username & email availability)
+        // Check async validations (username, email, NIC, & mobile availability)
         const needUsernameCheck = !usernameChecked || !usernameAvailable;
         const needEmailCheck = !emailChecked || !emailAvailable;
+        const needNICCheck = !nicChecked || !nicAvailable;
+        const needMobileCheck = !mobileChecked || !mobileAvailable;
 
-        if (needUsernameCheck || needEmailCheck) {
+        if (needUsernameCheck || needEmailCheck || needNICCheck || needMobileCheck) {
             event.preventDefault();
             
             const promises = [];
             if (needUsernameCheck) promises.push(validateUsernameField());
             if (needEmailCheck) promises.push(validateEmailFieldAsync());
+            if (needNICCheck) promises.push(validateNICFieldAsync());
+            if (needMobileCheck) promises.push(validateMobileFieldAsync());
             
             Promise.all(promises).then(function(results) {
                 const allValid = results.every(r => r === true);

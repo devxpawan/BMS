@@ -19,17 +19,12 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php'; // Include helper functions
 
-// Only Admin and Moderator can access pending invoices
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-if ($current_user_role !== 1 && $current_user_role !== 3) {
-    header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
-    exit();
-}
-
+$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 // Process invoice cancellation
 if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
     $invoice_id = $_POST['invoice_id'];
     $user_id = $_SESSION['user_id']; // Current logged-in user ID
+    $cancel_reason = isset($_POST['cancel_reason']) ? trim($_POST['cancel_reason']) : '';
     
     // Get invoice details for logging
     $invoice_sql = "SELECT c.name FROM invoices i 
@@ -46,10 +41,10 @@ if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
     $conn->begin_transaction();
     
     try {
-        // 1. Update the invoice status to 'cancel'
-        $update_invoice_sql = "UPDATE invoices SET status = 'cancel' WHERE invoice_id = ?";
+        // 1. Update the invoice status to 'cancel' and save cancel_reason
+        $update_invoice_sql = "UPDATE invoices SET status = 'cancel', cancel_reason = ? WHERE invoice_id = ?";
         $stmt = $conn->prepare($update_invoice_sql);
-        $stmt->bind_param("s", $invoice_id);
+        $stmt->bind_param("ss", $cancel_reason, $invoice_id);
         $stmt->execute();
         
         // 2. Update all related invoice items to 'cancel' status
@@ -58,9 +53,45 @@ if (isset($_POST['cancel_invoice']) && isset($_POST['invoice_id'])) {
         $stmt_items->bind_param("s", $invoice_id);
         $stmt_items->execute();
         
-        // 3. Log the action in user_logs table
+        // 3. Create credit memo if requested
+        if (isset($_POST['create_credit_memo']) && $_POST['create_credit_memo'] === '1') {
+            $cm_amount = isset($_POST['credit_memo_amount']) ? floatval($_POST['credit_memo_amount']) : 0;
+            $cm_reason = isset($_POST['credit_memo_reason']) ? trim($_POST['credit_memo_reason']) : $cancel_reason;
+            
+            // Get customer_id and currency from invoice
+            $cm_info_sql = "SELECT customer_id, currency FROM invoices WHERE invoice_id = ?";
+            $cm_stmt = $conn->prepare($cm_info_sql);
+            $cm_stmt->bind_param("s", $invoice_id);
+            $cm_stmt->execute();
+            $cm_info = $cm_stmt->get_result()->fetch_assoc();
+            $cm_stmt->close();
+            
+            if ($cm_amount > 0 && $cm_info) {
+                // Generate credit memo number: CM-YYYY-NNNN
+                $year = date('Y');
+                $cm_count_sql = "SELECT COUNT(*) as cnt FROM credit_memos WHERE YEAR(created_at) = ?";
+                $cm_count_stmt = $conn->prepare($cm_count_sql);
+                $cm_count_stmt->bind_param("s", $year);
+                $cm_count_stmt->execute();
+                $cm_count = $cm_count_stmt->get_result()->fetch_assoc()['cnt'] + 1;
+                $cm_count_stmt->close();
+                $cm_no = 'CM-' . $year . '-' . str_pad($cm_count, 4, '0', STR_PAD_LEFT);
+                
+                $insert_cm_sql = "INSERT INTO credit_memos (credit_memo_no, invoice_id, customer_id, amount, reason, status, created_by, created_at)
+                                  VALUES (?, ?, ?, ?, ?, 'refund', ?, NOW())";
+                $insert_cm_stmt = $conn->prepare($insert_cm_sql);
+                $insert_cm_stmt->bind_param("ssidsi", $cm_no, $invoice_id, $cm_info['customer_id'], $cm_amount, $cm_reason, $user_id);
+                $insert_cm_stmt->execute();
+                $insert_cm_stmt->close();
+            }
+        }
+        
+        // 4. Log the action in user_logs table
         $action_type = "cancel_invoice";
         $details = "Invoice ID #$invoice_id for customer ($customer_name) was canceled by user ID #$user_id";
+        if (!empty($cancel_reason)) {
+            $details .= " Reason: $cancel_reason";
+        }
         
         $log_sql = "INSERT INTO user_logs (user_id, action_type, inquiry_id, details, created_at) 
                    VALUES (?, ?, ?, ?, NOW())";
@@ -153,6 +184,27 @@ if ($countResult && $countResult->num_rows > 0) {
 $totalPages = ceil($totalRows / $limit);
 $result = $conn->query($sql);
 
+// Collect invoices and check pending edit requests
+$invoices = [];
+$pendingEditIds = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $invoices[] = $row;
+    }
+    $invoiceIds = array_map(function($inv) { return (int)$inv['invoice_id']; }, $invoices);
+    if (!empty($invoiceIds)) {
+        $ids = implode(',', $invoiceIds);
+        $peStmt = $conn->prepare("SELECT invoice_id FROM invoice_edit_requests WHERE invoice_id IN ($ids) AND requester_id = ? AND status = 'pending'");
+        $peStmt->bind_param("i", $user_id);
+        $peStmt->execute();
+        $peResult = $peStmt->get_result();
+        while ($pe = $peResult->fetch_assoc()) {
+            $pendingEditIds[] = $pe['invoice_id'];
+        }
+        $peStmt->close();
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -179,6 +231,14 @@ $result = $conn->query($sql);
                     </div>
                 </div>
                     
+                    <?php if (isset($_SESSION['invoice_success'])): ?>
+                        <script>document.addEventListener('DOMContentLoaded', function() { showToast('success', '<?php echo addslashes($_SESSION["invoice_success"]); ?>'); });</script>
+                        <?php unset($_SESSION['invoice_success']); ?>
+                    <?php endif; ?>
+                    <?php if (isset($_SESSION['invoice_error'])): ?>
+                        <script>document.addEventListener('DOMContentLoaded', function() { showToast('error', '<?php echo addslashes($_SESSION["invoice_error"]); ?>'); });</script>
+                        <?php unset($_SESSION['invoice_error']); ?>
+                    <?php endif; ?>
                     <?php if (isset($_SESSION['message'])): ?>
                         <script>document.addEventListener('DOMContentLoaded', function() { showToast('<?php echo $_SESSION["message_type"] === "danger" ? "error" : $_SESSION["message_type"]; ?>', '<?php echo addslashes($_SESSION["message"]); ?>'); });</script>
                         <?php unset($_SESSION['message']); unset($_SESSION['message_type']); ?>
@@ -242,8 +302,8 @@ $result = $conn->query($sql);
                                             </tr>
                                         </thead>
                                     <tbody>
-                                        <?php if ($result && $result->num_rows > 0): ?>
-                                            <?php while ($row = $result->fetch_assoc()): ?>
+                                        <?php if (!empty($invoices)): ?>
+                                            <?php foreach ($invoices as $row): ?>
                                                 <tr>
                                                     <td><?php echo isset($row['invoice_id']) ? htmlspecialchars($row['invoice_id']) : ''; ?>
                                                     </td>
@@ -274,19 +334,22 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td><?php echo isset($row['issue_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['issue_date']))) : ''; ?>
                                                     </td>
-                                                    <td><?php echo isset($row['due_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
+                                                    <td><?php echo (isset($row['due_date']) && !empty($row['due_date']) && $row['due_date'] !== '0000-00-00') ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
                                                     </td>
                                                     <td>
                                                         <?php
-                                                        $amount = isset($row['total_amount']) ? htmlspecialchars(number_format((float) $row['total_amount'], 2)) : '0.00';
+                                                        $totalAmt = isset($row['total_amount']) ? floatval($row['total_amount']) : 0;
+                                                        $paidAmt = isset($row['amount_paid']) ? floatval($row['amount_paid']) : 0;
                                                         $currency = isset($row['currency']) ? $row['currency'] : 'lkr';
                                                         $currencySymbol = ($currency == 'usd') ? '$' : 'Rs';
                                                         $payStatus = isset($row['pay_status']) ? $row['pay_status'] : 'unpaid';
 
-                                                        echo '<div class="amount-text">' . $amount . ' <span class="currency-symbol">(' . $currencySymbol . ')</span></div>';
+                                                        echo '<div class="amount-text">' . number_format($paidAmt, 2) . ' / ' . number_format($totalAmt, 2) . ' <span class="currency-symbol">(' . $currencySymbol . ')</span></div>';
 
                                                         if ($payStatus == 'paid'): ?>
                                                             <span class="badge-soft badge-soft-success mt-1">Paid</span>
+                                                        <?php elseif ($payStatus == 'partial'): ?>
+                                                            <span class="badge-soft badge-soft-warning mt-1">Partial</span>
                                                         <?php else: ?>
                                                             <span class="badge-soft badge-soft-danger mt-1">Unpaid</span>
                                                         <?php endif;
@@ -306,6 +369,7 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td>
                                                         <div class="action-btn-group d-flex gap-1">
+                                                            <?php if (hasAccess('invoices.pending')): ?>
                                                             <a href="#" class="btn btn-view view-invoice"
                                                                 title="View Invoice"
                                                                 data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>">
@@ -317,30 +381,47 @@ $result = $conn->query($sql);
                                                                 target="_blank">
                                                                 <i class="fas fa-download"></i>
                                                             </a>
+                                                            <?php endif; ?>
                                                             <?php if ($payStatus == 'paid'): ?>
 
+                                                            <?php else: ?>
+                                                            <?php if ($payStatus == 'unpaid' && hasAccess('invoices.pending')): ?>
+                                                            <?php if (in_array($row['invoice_id'], $pendingEditIds)): ?>
+                                                                <button class="btn btn-edit disabled"
+                                                                    title="Edit request pending approval"
+                                                                    style="opacity:0.5;cursor:not-allowed;">
+                                                                    <i class="fas fa-edit"></i>
+                                                                </button>
                                                             <?php else: ?>
                                                                 <a href="<?= BASE_URL ?>modules/invoices/invoice_edit.php?id=<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
                                                                     class="btn btn-edit"
                                                                     title="Edit Invoice">
                                                                     <i class="fas fa-edit"></i>
                                                                 </a>
+                                                            <?php endif; ?>
+                                                            <?php endif; ?>
+                                                                <?php if (hasAccess('invoices.pending')): ?>
                                                                 <a href="#" class="btn btn-view mark-paid"
-                                                                    title="Mark as Paid"
+                                                                    title="Record Payment"
                                                                     data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>">
                                                                     <i class="fas fa-check"></i>
                                                                 </a>
+                                                                <?php endif; ?>
+                                                                <?php if (($payStatus == 'unpaid' || $payStatus == 'partial') && hasAccess('invoices.cancel')): ?>
                                                                 <button type="button" class="btn btn-cancel cancel-invoice"
                                                                     title="Cancel Invoice"
                                                                     data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
-                                                                    data-customer="<?php echo htmlspecialchars($customerName); ?>">
+                                                                    data-customer="<?php echo htmlspecialchars($customerName); ?>"
+                                                                    data-amount="<?php echo $paidAmt; ?>"
+                                                                    data-currency="<?php echo $currency; ?>">
                                                                     <i class="fas fa-times-circle"></i>
                                                                 </button>
+                                                                <?php endif; ?>
                                                             <?php endif; ?>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            <?php endwhile; ?>
+                                            <?php endforeach; ?>
                                         <?php else: ?>
 <tr>
                                                         <td colspan="9" class="text-center">No pending invoices found</td>
@@ -353,7 +434,7 @@ $result = $conn->query($sql);
                             <!-- Pagination -->
                             <div class="pagination-container d-flex justify-content-between align-items-center mt-4">
                                 <div class="entries-info">
-                                    <?php if ($result && $result->num_rows > 0): ?>
+                                    <?php if (!empty($invoices)): ?>
                                         Showing <strong><?php echo ($offset + 1); ?></strong> to
                                         <strong><?php echo min($offset + $limit, $totalRows); ?></strong> of <strong><?php echo $totalRows; ?></strong>
                                         entries
@@ -385,12 +466,12 @@ $result = $conn->query($sql);
         </div>
     </div>
 
-    <!-- Modal for Marking Invoice as Paid -->
+    <!-- Modal for Recording Payment -->
     <div class="modal fade" id="markPaidModal" tabindex="-1" aria-labelledby="markPaidModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-system">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="markPaidModalLabel"><i class="fas fa-money-bill-wave me-2"></i>Payment Sheet</h5>
+                    <h5 class="modal-title" id="markPaidModalLabel"><i class="fas fa-money-bill-wave me-2"></i>Record Payment</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form id="markPaidForm" enctype="multipart/form-data">
@@ -401,8 +482,31 @@ $result = $conn->query($sql);
                             <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10 mb-3" style="width: 64px; height: 64px;">
                                 <i class="fas fa-money-bill-wave fa-2x text-success"></i>
                             </div>
-                            <h6 class="fw-bold mb-1">Confirm Payment</h6>
-                            <p class="text-muted small">Upload the payment slip to mark this invoice as paid.</p>
+                            <h6 class="fw-bold mb-1">Record Payment</h6>
+                            <p class="text-muted small">Enter the payment amount and details below.</p>
+                        </div>
+
+                        <div class="detail-card mb-3">
+                            <label class="detail-label mb-2"><i class="fas fa-money-bill"></i> Payment Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">Rs</span>
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="payment_amount" name="amount" placeholder="Enter amount" required>
+                            </div>
+                            <small class="form-text text-muted mt-1 d-block">Remaining balance: Rs <span id="remainingBalance">0.00</span></small>
+                        </div>
+
+                        <div class="detail-card mb-3">
+                            <label class="detail-label mb-2"><i class="fas fa-credit-card"></i> Payment Method</label>
+                            <div class="d-flex gap-4 mt-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="payment_cash" value="Cash" checked>
+                                    <label class="form-check-label" for="payment_cash">Cash</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="payment_bank" value="Bank Transfer">
+                                    <label class="form-check-label" for="payment_bank">Bank Transfer</label>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="detail-card">
@@ -414,7 +518,7 @@ $result = $conn->query($sql);
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-success">
-                            <i class="fas fa-check-circle me-1"></i>Mark as Paid
+                            <i class="fas fa-check-circle me-1"></i>Record Payment
                         </button>
                     </div>
                 </form>
@@ -454,6 +558,34 @@ $result = $conn->query($sql);
                                 </div>
                             </div>
                         </div>
+                        <div class="col-12">
+                            <label for="cancel_reason" class="form-label fw-semibold">Cancel Reason <span class="text-muted">(Optional)</span></label>
+                            <textarea class="form-control" id="cancel_reason" name="cancel_reason" rows="3" placeholder="Enter the reason for cancellation..."></textarea>
+                        </div>
+
+                        <!-- Credit Memo Section (hidden when no payment) -->
+                        <div class="col-12 d-none" id="creditMemoSection">
+                            <hr>
+                            <div class="p-3 bg-info-soft rounded-3 border-start border-info border-4" style="background-color: rgba(13, 202, 240, 0.08);">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="create_credit_memo" name="create_credit_memo" value="1" checked>
+                                    <label class="form-check-label fw-semibold" for="create_credit_memo">
+                                        Create Credit Memo
+                                    </label>
+                                </div>
+                                <p class="text-muted small mb-2">This invoice has <strong id="cm_paid_amount">Rs 0.00</strong> paid. Create a credit memo to record the amount owed back to the customer.</p>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold">Credit Amount</label>
+                                        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" id="credit_memo_amount" name="credit_memo_amount" placeholder="0.00">
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label small fw-semibold">Reason <span class="text-muted">(Optional)</span></label>
+                                        <input type="text" class="form-control form-control-sm" id="credit_memo_reason" name="credit_memo_reason" placeholder="Reason for credit memo">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-top-0 py-3">
@@ -461,6 +593,10 @@ $result = $conn->query($sql);
                     <form method="post" id="cancelInvoiceForm" class="m-0">
                         <input type="hidden" name="invoice_id" id="confirm_cancel_invoice_id">
                         <input type="hidden" name="cancel_invoice" value="1">
+                        <input type="hidden" name="cancel_reason" id="confirm_cancel_reason">
+                        <input type="hidden" name="create_credit_memo" id="confirm_create_credit_memo" value="0">
+                        <input type="hidden" name="credit_memo_amount" id="confirm_credit_memo_amount" value="0">
+                        <input type="hidden" name="credit_memo_reason" id="confirm_credit_memo_reason" value="">
                             <?php foreach (['search','filter_from_date','filter_to_date','filter_customer'] as $f):
                                     if (!empty($$f)): ?>
                                     <input type="hidden" name="<?= $f ?>" value="<?= htmlspecialchars($$f) ?>">
@@ -520,34 +656,60 @@ $result = $conn->query($sql);
         $(document).ready(function () {
             // Handle "Paid" button click
             $('.mark-paid').click(function (e) {
-                e.preventDefault(); // Prevent default link behavior
+                e.preventDefault();
 
-                var invoiceId = $(this).data('id'); // Get the invoice ID
+                var invoiceId = $(this).data('id');
 
-                // Get additional information about the invoice
-                var invoiceRow = $(this).closest('tr');
-                var invoiceAmount = invoiceRow.find('td:eq(4)').text().trim();
-                var customerName = invoiceRow.find('td:eq(1)').text().trim();
+                // Fetch invoice details to pre-fill remaining balance
+                $.ajax({
+                    url: 'get_payment_details.php',
+                    type: 'GET',
+                    data: { invoice_id: invoiceId },
+                    success: function (response) {
+                        if (response.success) {
+                            var totalAmount = parseFloat(response.total_amount.replace(/,/g, ''));
+                            var totalPaid = parseFloat(response.total_paid.replace(/,/g, ''));
+                            var remaining = totalAmount - totalPaid;
 
-                // Directly set the invoice ID in the form
-                $('#invoice_id').val(invoiceId);
+                            $('#invoice_id').val(invoiceId);
+                            $('#payment_amount').val(remaining > 0 ? remaining.toFixed(2) : '');
+                            $('#payment_amount').attr('max', remaining.toFixed(2));
+                            $('#remainingBalance').text(remaining.toFixed(2));
+                            $('#markPaidModalLabel').html('<i class="fas fa-money-bill-wave me-2"></i>Record Payment - Invoice #' + invoiceId);
+                            $('#markPaidModal').modal('show');
+                        } else {
+                            showToast('error', 'Failed to load invoice details.');
+                        }
+                    },
+                    error: function () {
+                        showToast('error', 'Failed to load invoice details.');
+                    }
+                });
+            });
 
-                // Optionally, you could update the modal with invoice details
-                $('#markPaidModalLabel').html('<i class="fas fa-money-bill-wave me-2"></i>Payment Sheet - Invoice #' + invoiceId);
-
-                // Show the modal
-                $('#markPaidModal').modal('show');
+            // Validate amount doesn't exceed remaining
+            $('#payment_amount').on('input', function () {
+                var maxVal = parseFloat($(this).attr('max'));
+                var currentVal = parseFloat($(this).val()) || 0;
+                if (currentVal > maxVal) {
+                    $(this).val(maxVal.toFixed(2));
+                }
             });
 
             // Handle form submission with validation
             $('#markPaidForm').submit(function (e) {
-                e.preventDefault(); // Prevent default form submission
+                e.preventDefault();
 
-                // Simple validation
+                var amount = parseFloat($('#payment_amount').val()) || 0;
+                if (amount <= 0) {
+                    showToast('warning', 'Please enter a valid payment amount.');
+                    return false;
+                }
+
                 var fileInput = $('#payment_slip')[0];
 
                 if (fileInput.files.length > 0) {
-                    var fileSize = fileInput.files[0].size / 1024 / 1024; // in MB
+                    var fileSize = fileInput.files[0].size / 1024 / 1024;
                     if (fileSize > 2) {
                         showToast('warning', 'File size exceeds 2MB. Please choose a smaller file.');
                         return false;
@@ -569,21 +731,23 @@ $result = $conn->query($sql);
                     processData: false,
                     contentType: false,
                     success: function (response) {
-                        // Show success message with showToast
-                        showToast('success', 'Invoice has been marked as paid successfully.');
-                        
+                        showToast('success', 'Payment recorded successfully.');
+
                         setTimeout(() => {
                             $('#markPaidModal').modal('hide');
-                            location.reload(); // Reload the page to reflect changes
+                            location.reload();
                         }, 2000);
                     },
-                    error: function (xhr, status, error) {
-                        // Reset button state
+                    error: function (xhr) {
                         submitBtn.html(originalText);
                         submitBtn.prop('disabled', false);
 
-                        // Show error message with showToast
-                        showToast('error', 'Failed to mark invoice as paid. Please try again.');
+                        var errMsg = 'Failed to record payment. Please try again.';
+                        try {
+                            var resp = JSON.parse(xhr.responseText);
+                            if (resp.error) errMsg = resp.error;
+                        } catch(e) {}
+                        showToast('error', errMsg);
                     }
                 });
             });
@@ -596,10 +760,57 @@ $result = $conn->query($sql);
             $('.cancel-invoice').click(function() {
                 var invoiceId = $(this).data('id');
                 var customerName = $(this).data('customer');
+                var amountPaid = parseFloat($(this).data('amount')) || 0;
+                var currency = $(this).data('currency') || 'lkr';
+                var currencySymbol = (currency === 'usd') ? '$' : 'Rs';
+
                 $('#cancel_invoice_id').text(invoiceId);
                 $('#cancel_customer_name').text(customerName);
                 $('#confirm_cancel_invoice_id').val(invoiceId);
+                $('#cancel_reason').val('');
+                $('#credit_memo_reason').val('');
+
+                // Reset credit memo fields
+                $('#confirm_create_credit_memo').val('0');
+                $('#confirm_credit_memo_amount').val('0');
+                $('#confirm_credit_memo_reason').val('');
+
+                // Show/hide credit memo section based on paid amount
+                if (amountPaid > 0) {
+                    $('#cm_paid_amount').text(currencySymbol + ' ' + amountPaid.toFixed(2));
+                    $('#credit_memo_amount').val(amountPaid.toFixed(2));
+                    $('#create_credit_memo').prop('checked', true);
+                    $('#creditMemoSection').removeClass('d-none');
+                } else {
+                    $('#creditMemoSection').addClass('d-none');
+                }
+
                 $('#cancelInvoiceModal').modal('show');
+            });
+
+            // Toggle credit memo fields visibility
+            $('#create_credit_memo').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $('#credit_memo_amount').prop('disabled', false);
+                    $('#credit_memo_reason').prop('disabled', false);
+                } else {
+                    $('#credit_memo_amount').prop('disabled', true);
+                    $('#credit_memo_reason').prop('disabled', true);
+                }
+            });
+
+            $('#cancelInvoiceForm').on('submit', function() {
+                $('#confirm_cancel_reason').val($('#cancel_reason').val());
+
+                var createCm = $('#create_credit_memo').is(':checked') ? '1' : '0';
+                $('#confirm_create_credit_memo').val(createCm);
+                if (createCm === '1') {
+                    $('#confirm_credit_memo_amount').val($('#credit_memo_amount').val());
+                    $('#confirm_credit_memo_reason').val($('#credit_memo_reason').val());
+                } else {
+                    $('#confirm_credit_memo_amount').val('0');
+                    $('#confirm_credit_memo_reason').val('');
+                }
             });
             
 

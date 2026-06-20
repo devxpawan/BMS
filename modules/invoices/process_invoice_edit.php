@@ -24,15 +24,26 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-if ($current_user_role !== 1 && $current_user_role !== 3) {
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
+$current_user_id = $_SESSION['user_id'] ?? 0;
+$canEditDirectly = isApprover();
+
+if (!$canEditDirectly && empty($_POST['invoice_id'])) {
+    while (ob_get_level()) ob_end_clean();
     $_SESSION['message'] = "You do not have permission to edit invoices.";
     $_SESSION['message_type'] = "danger";
     header("Location: " . BASE_URL . "modules/invoices/pending_invoice_list.php");
     exit();
+}
+
+if (!$canEditDirectly) {
+    $invoice_id_check = isset($_POST['invoice_id']) ? (int)$_POST['invoice_id'] : 0;
+    if ($invoice_id_check === 0 || !hasApprovedEditRequest($conn, $invoice_id_check, $current_user_id)) {
+        while (ob_get_level()) ob_end_clean();
+        $_SESSION['message'] = "You do not have an approved edit request for this invoice.";
+        $_SESSION['message_type'] = "danger";
+        header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
+        exit();
+    }
 }
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
@@ -81,6 +92,7 @@ try {
     $customer_email = !empty($_POST['customer_email']) ? trim($_POST['customer_email']) : null;
     $customer_address = $_POST['customer_address'] ?? '';
     $customer_phone = $_POST['customer_phone'] ?? '';
+    $customer_business_name = !empty($_POST['customer_business_name']) ? trim($_POST['customer_business_name']) : null;
 
     $customer_id = 0;
     $incoming_customer_id = isset($_POST['customer_id']) && !empty($_POST['customer_id']) ? (int) $_POST['customer_id'] : 0;
@@ -92,8 +104,8 @@ try {
         $existingCustResult = $checkExistingCustomer->get_result();
         if ($existingCustResult->num_rows > 0) {
             $customer_id = $incoming_customer_id;
-            $updateExistingCustomer = $conn->prepare("UPDATE customers SET name = ?, email = ?, phone = ?, address = ? WHERE customer_id = ?");
-            $updateExistingCustomer->bind_param("ssssi", $customer_name, $customer_email, $customer_phone, $customer_address, $customer_id);
+            $updateExistingCustomer = $conn->prepare("UPDATE customers SET name = ?, email = ?, phone = ?, address = ?, business_name = ? WHERE customer_id = ?");
+            $updateExistingCustomer->bind_param("sssssi", $customer_name, $customer_email, $customer_phone, $customer_address, $customer_business_name, $customer_id);
             $updateExistingCustomer->execute();
         }
     }
@@ -114,20 +126,20 @@ try {
         if ($result->num_rows > 0) {
             $customer = $result->fetch_assoc();
             $customer_id = (int) $customer['customer_id'];
-            $updateCustomer = $conn->prepare("UPDATE customers SET phone = ?, address = ? WHERE customer_id = ?");
-            $updateCustomer->bind_param("ssi", $customer_phone, $customer_address, $customer_id);
+            $updateCustomer = $conn->prepare("UPDATE customers SET phone = ?, address = ?, business_name = ? WHERE customer_id = ?");
+            $updateCustomer->bind_param("sssi", $customer_phone, $customer_address, $customer_business_name, $customer_id);
             $updateCustomer->execute();
         } else {
-            $insertCustomerSql = "INSERT INTO customers (name, email, phone, address, status) VALUES (?, ?, ?, ?, 'Active')";
+            $insertCustomerSql = "INSERT INTO customers (name, email, phone, address, business_name, status) VALUES (?, ?, ?, ?, ?, 'Active')";
             $stmt = $conn->prepare($insertCustomerSql);
-            $stmt->bind_param("ssss", $customer_name, $customer_email, $customer_phone, $customer_address);
+            $stmt->bind_param("sssss", $customer_name, $customer_email, $customer_phone, $customer_address, $customer_business_name);
             $stmt->execute();
             $customer_id = $conn->insert_id;
         }
     }
 
     $invoice_date = $_POST['invoice_date'] ?? date('Y-m-d');
-    $due_date = $_POST['due_date'] ?? date('Y-m-d', strtotime('+30 days'));
+    $due_date = !empty($_POST['due_date']) ? $_POST['due_date'] : date('Y-m-d', strtotime('+30 days'));
     $notes = $_POST['notes'] ?? '';
     $currency = 'lkr';
 
@@ -137,6 +149,7 @@ try {
     $discounts = $_POST['invoice_product_discount'] ?? [];
     $discount_types = $_POST['invoice_product_discount_type'] ?? [];
     $product_descriptions = $_POST['invoice_product_description'] ?? [];
+    $item_ids = $_POST['invoice_item_id'] ?? [];
 
     $subtotal = 0;
     $total_discount = 0;
@@ -151,6 +164,7 @@ try {
         $discount_val = floatval($discounts[$key] ?? 0);
         $discount_type = $discount_types[$key] ?? 'flat';
         $description = $product_descriptions[$key] ?? '';
+        $item_id = intval($item_ids[$key] ?? 0);
 
         $row_total = $price * $qty;
 
@@ -164,18 +178,18 @@ try {
         $subtotal += $row_total;
         $total_discount += $discount;
 
-        // Determine if it's a real product (numeric ID) or custom product (text name)
-        $product_id = is_numeric($product_val) ? intval($product_val) : null;
-        $product_name = is_numeric($product_val) ? null : $product_val;
+        // Always store as text name (no product table dependency)
+        $product_name = $product_val;
 
         $invoice_items[] = [
-            'product_id' => $product_id,
+            'item_id' => $item_id,
             'product_name' => $product_name,
             'price' => $price,
             'qty' => $qty,
             'discount' => $discount,
             'discount_type' => $discount_type,
-            'description' => $description
+            'description' => $description,
+            'total' => $row_total - $discount
         ];
     }
 
@@ -199,7 +213,7 @@ try {
 
     $stmt = $conn->prepare($updateInvoiceSql);
     $stmt->bind_param(
-        "isdddddssi",
+        "issddddssi",
         $customer_id,
         $invoice_date,
         $due_date,
@@ -213,36 +227,76 @@ try {
     );
     $stmt->execute();
 
-    $deleteItemsSql = "DELETE FROM invoice_items WHERE invoice_id = ?";
-    $stmt = $conn->prepare($deleteItemsSql);
-    $stmt->bind_param("i", $invoice_id);
-    $stmt->execute();
-
+    // Get existing item IDs for this invoice
+    $existingStmt = $conn->prepare("SELECT item_id FROM invoice_items WHERE invoice_id = ?");
+    $existingStmt->bind_param("i", $invoice_id);
+    $existingStmt->execute();
+    $existingResult = $existingStmt->get_result();
+    $existingIds = [];
+    while ($row = $existingResult->fetch_assoc()) {
+        $existingIds[] = $row['item_id'];
+    }
+    $existingStmt->close();
+    
+    // Collect submitted item IDs (only non-zero = existing items to keep)
+    $submittedIds = [];
+    foreach ($invoice_items as $item) {
+        if ($item['item_id'] > 0) {
+            $submittedIds[] = $item['item_id'];
+        }
+    }
+    
+    // Delete items that were removed from the form (in DB but not in submitted IDs)
+    if (!empty($existingIds)) {
+        $idsToDelete = array_diff($existingIds, $submittedIds);
+        if (!empty($idsToDelete)) {
+            $placeholders = implode(',', array_fill(0, count($idsToDelete), '?'));
+            $deleteStmt = $conn->prepare("DELETE FROM invoice_items WHERE item_id IN ($placeholders)");
+            $deleteStmt->bind_param(str_repeat('i', count($idsToDelete)), ...$idsToDelete);
+            $deleteStmt->execute();
+            $deleteStmt->close();
+        }
+    }
+    
+    // Update existing items and insert new ones
+    $updateItemSql = "UPDATE invoice_items SET product_name = ?, quantity = ?, discount = ?, discount_type = ?, total_amount = ?, description = ? WHERE item_id = ?";
     $insertItemSql = "INSERT INTO invoice_items (
-        invoice_id, product_id, product_name, quantity, discount, discount_type,
+        invoice_id, product_name, quantity, discount, discount_type,
         total_amount, pay_status, status, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($insertItemSql);
-
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    
+    $updateStmt = $conn->prepare($updateItemSql);
+    $insertStmt = $conn->prepare($insertItemSql);
+    
     foreach ($invoice_items as $item) {
         $item_total = ($item['price'] * $item['qty']) - $item['discount'];
-        $pay_status = 'unpaid';
-        $status = 'pending';
-        $stmt->bind_param(
-            "iisidsdsss",
-            $invoice_id,
-            $item['product_id'],
-            $item['product_name'],
-            $item['qty'],
-            $item['discount'],
-            $item['discount_type'],
-            $item_total,
-            $pay_status,
-            $status,
-            $item['description']
-        );
-        $stmt->execute();
+        
+        if ($item['item_id'] > 0) {
+            // Update existing item
+            $updateStmt->bind_param("sidsdsi", $item['product_name'], $item['qty'], $item['discount'], $item['discount_type'], $item_total, $item['description'], $item['item_id']);
+            $updateStmt->execute();
+        } else {
+            // Insert new item
+            $pay_status = 'unpaid';
+            $status = 'pending';
+            $insertStmt->bind_param(
+                "isidsdsss",
+                $invoice_id,
+                $item['product_name'],
+                $item['qty'],
+                $item['discount'],
+                $item['discount_type'],
+                $item_total,
+                $pay_status,
+                $status,
+                $item['description']
+            );
+            $insertStmt->execute();
+        }
     }
+    
+    $updateStmt->close();
+    $insertStmt->close();
 
     $action_type = "edit_invoice";
     $details = "Invoice ID #$invoice_id was updated by user ID #$user_id. New total: $total_amount $currency.";

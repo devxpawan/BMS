@@ -9,11 +9,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
-if (!isset($_SESSION['role_id']) || !in_array($_SESSION['role_id'], [1, 3])) {
-    header("Location: " . BASE_URL . "modules/products/product_list.php");
-    exit();
-}
-
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
@@ -127,11 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
     <title>Edit Product</title>
     <link href="<?= BASE_URL ?>css/forms.css" rel="stylesheet" />
-    <style>
-        body {
-            background-color: #f8fafc;
-        }
-    </style>
+    <style></style>
 </head>
 
 <body class="sb-nav-fixed">
@@ -235,9 +226,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                                     <!-- Submit Button -->
                                     <div class="row mt-4 pt-3 border-top">
-                                        <div class="col-12 d-flex justify-content-end gap-3">
+                                        <div class="col-12 d-flex justify-content-end gap-2">
                                             <a href="<?= BASE_URL ?>modules/products/product_list.php" class="back-btn text-decoration-none d-flex align-items-center">
-                                                <i class="fas fa-arrow-left me-2"></i> Cancel
+                                                <i class="fas fa-arrow-left me-1"></i> Cancel
                                             </a>
                                             <button type="submit" class="save-btn" id="submitBtn" disabled>
                                                 <i class="fas fa-save"></i> Update Product

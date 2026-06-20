@@ -8,11 +8,12 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
-
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-$canEditRecords = ($current_user_role === 1 || $current_user_role === 3);
 
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
@@ -90,6 +91,17 @@ $result = $conn->query($sql);
                     </div>
                 </div>
                     
+                <div class="alert-container">
+                    <?php if (isset($_SESSION['quotation_error'])): ?>
+                        <script>document.addEventListener('DOMContentLoaded', function() { showToast('error', '<?php echo addslashes($_SESSION["quotation_error"]); ?>'); });</script>
+                        <?php unset($_SESSION['quotation_error']); ?>
+                    <?php endif; ?>
+                    <?php if (isset($_SESSION['quotation_success'])): ?>
+                        <script>document.addEventListener('DOMContentLoaded', function() { showToast('success', '<?php echo addslashes($_SESSION["quotation_success"]); ?>'); });</script>
+                        <?php unset($_SESSION['quotation_success']); ?>
+                    <?php endif; ?>
+                </div>
+
                     <div class="card quotation-card">
                         <div class="card-body">
                             <div class="quotation-filter-bar">
@@ -177,12 +189,17 @@ $result = $conn->query($sql);
 <td><?php echo htmlspecialchars($row['creator_name']); ?></td>
                             <td>
                                 <div class="action-btn-group d-flex gap-1">
+                                    <?php if (hasAccess('quotations.draft')): ?>
                                     <a href="#" class="btn btn-view view-quotation" title="View Quotation"
                                         data-id="<?php echo $row['quotation_id']; ?>">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="<?= BASE_URL ?>modules/quotations/quotation_edit.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-edit" title="Edit Quotation">
-                                        <i class="fas fa-edit"></i>
+                                    <a href="<?= BASE_URL ?>modules/quotations/revise_quotation.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-edit" title="Revise Quotation">
+                                        <i class="fas fa-history"></i>
+                                    </a>
+                                    <a href="javascript:void(0);" class="btn btn-view revision-history" title="Revision History"
+                                        data-id="<?php echo $row['quotation_id']; ?>">
+                                        <i class="fas fa-code-branch"></i>
                                     </a>
                                     <a href="<?= BASE_URL ?>modules/quotations/download_quotation.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-download" title="Download Quotation" target="_blank">
                                         <i class="fas fa-download"></i>
@@ -190,9 +207,12 @@ $result = $conn->query($sql);
                                     <a href="javascript:void(0);" onclick="convertAndOpen('convert_to_invoice.php?id=<?php echo $row['quotation_id']; ?>')" class="btn btn-process" title="Convert to Invoice">
                                         <i class="fas fa-file-invoice"></i>
                                     </a>
-                                    <a href="<?= BASE_URL ?>modules/quotations/cancel_quotation.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-cancel cancel-quotation" title="Cancel Quotation">
+                                    <a href="javascript:void(0);" class="btn btn-cancel cancel-quotation" title="Cancel Quotation"
+                                        data-id="<?php echo $row['quotation_id']; ?>"
+                                        data-customer="<?php echo htmlspecialchars($row['customer_business_name'] ?: $row['customer_name']); ?>">
                                         <i class="fas fa-times-circle"></i>
                                     </a>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                                                 </tr>
@@ -216,6 +236,25 @@ $result = $conn->query($sql);
         </div>
     </div>
     
+    <!-- Modal for Revision History -->
+    <div class="modal fade" id="revisionHistoryModal" tabindex="-1" aria-labelledby="revisionHistoryModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="revisionHistoryModalLabel"><i class="fas fa-code-branch me-2"></i>Revision History</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="revisionChainContent">
+                    Loading...
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal for Viewing Quotation -->
     <div class="modal fade" id="viewQuotationModal" tabindex="-1" aria-labelledby="viewQuotationModalLabel"
         aria-hidden="true">
@@ -232,12 +271,82 @@ $result = $conn->query($sql);
         </div>
     </div>
     
+    <!-- Modal for Cancel Quotation Confirmation -->
+    <div class="modal fade" id="cancelQuotationModal" tabindex="-1" aria-labelledby="cancelQuotationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-light border-bottom-0 py-3">
+                    <h5 class="modal-title fw-bold" id="cancelQuotationModalLabel">
+                        <i class="fas fa-times-circle me-2 text-danger"></i>Cancel Quotation
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="text-center mb-4">
+                        <div class="icon-box bg-danger-soft rounded-circle mx-auto mb-3" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; background-color: rgba(220, 53, 69, 0.1);">
+                            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                        </div>
+                        <h6 class="fw-bold mb-1">Are you sure?</h6>
+                        <p class="text-muted small">This action will cancel the quotation. This cannot be undone.</p>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="p-3 bg-light rounded-3 border-start border-danger border-4">
+                                <div class="mb-2">
+                                    <small class="text-muted text-uppercase fw-semibold letter-spacing-1 d-block">Quotation ID</small>
+                                    <span class="fw-bold text-dark" id="cancel_quotation_id"></span>
+                                </div>
+                                <div>
+                                    <small class="text-muted text-uppercase fw-semibold letter-spacing-1 d-block">Customer</small>
+                                    <span class="fw-bold text-dark" id="cancel_quotation_customer"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label for="cancel_reason" class="form-label fw-semibold">Cancel Reason <span class="text-muted">(Optional)</span></label>
+                            <textarea class="form-control" id="cancel_reason" name="cancel_reason" rows="3" placeholder="Enter the reason for cancellation..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top-0 py-3">
+                    <button type="button" class="btn btn-link text-muted text-decoration-none fw-semibold" data-bs-dismiss="modal">Close</button>
+                    <form method="post" action="cancel_quotation.php" id="cancelQuotationForm" class="m-0">
+                        <input type="hidden" name="quotation_id" id="confirm_cancel_quotation_id">
+                        <input type="hidden" name="cancel_reason" id="confirm_cancel_reason">
+                        <button type="submit" class="btn btn-danger px-4 rounded-pill fw-bold">
+                            <i class="fas fa-times me-1"></i>Confirm Cancel
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_URL ?>js/scripts.js"></script>
     
     <script>
         $(document).ready(function () {
+            $('.revision-history').click(function (e) {
+                e.preventDefault();
+                var quotationId = $(this).data('id');
+                $('#revisionChainContent').html('Loading...');
+                $.ajax({
+                    url: 'get_revision_chain.php',
+                    type: 'GET',
+                    data: { id: quotationId },
+                    success: function (response) {
+                        $('#revisionChainContent').html(response);
+                        $('#revisionHistoryModal').modal('show');
+                    },
+                    error: function () {
+                        $('#revisionChainContent').html('Failed to load revision history.');
+                    }
+                });
+            });
+
             $('.view-quotation').click(function (e) {
                 e.preventDefault();
                 var quotationId = $(this).data('id');
@@ -284,21 +393,17 @@ $result = $conn->query($sql);
 
         $(document).on('click', '.cancel-quotation', function(e) {
             e.preventDefault();
-            var url = $(this).attr('href');
-            Swal.fire({
-                title: 'Cancel Quotation?',
-                text: 'Are you sure you want to cancel this quotation?',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Yes, cancel it!',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = url;
-                }
-            });
+            var quotationId = $(this).data('id');
+            var customerName = $(this).data('customer');
+            $('#cancel_quotation_id').text(quotationId);
+            $('#cancel_quotation_customer').text(customerName);
+            $('#confirm_cancel_quotation_id').val(quotationId);
+            $('#cancel_reason').val('');
+            $('#cancelQuotationModal').modal('show');
+        });
+
+        $('#cancelQuotationForm').on('submit', function() {
+            $('#confirm_cancel_reason').val($('#cancel_reason').val());
         });
     </script>
 </body>

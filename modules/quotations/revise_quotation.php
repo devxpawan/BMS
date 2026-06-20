@@ -3,16 +3,13 @@ require_once __DIR__ . '/../../config/paths.php';
 
 session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    if (ob_get_level()) {
-        ob_end_clean();
-    }
+    if (ob_get_level()) { ob_end_clean(); }
     header("Location: " . BASE_URL . "signin.php");
     exit();
 }
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
-// Check if quotation ID is provided
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     header("Location: " . BASE_URL . "modules/quotations/draft_quotation_list.php");
     exit();
@@ -21,10 +18,10 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 $quotation_id = (int)$_GET['id'];
 
 // Fetch the quotation
-$q_query = "SELECT q.*, c.name as customer_name, 
+$q_query = "SELECT q.*, c.name as customer_name,
                 c.address as customer_address, c.email as customer_email, c.phone as customer_phone,
                 c.business_name as customer_business_name
-                FROM quotations q 
+                FROM quotations q
                 LEFT JOIN customers c ON q.customer_id = c.customer_id
                 WHERE q.quotation_id = ?";
 
@@ -40,18 +37,20 @@ if ($q_result->num_rows === 0) {
 
 $quotation = $q_result->fetch_assoc();
 
-// Only allow editing draft quotations
-if ($quotation['status'] !== 'Draft') {
+// Cannot revise an already revised or accepted quotation
+if ($quotation['status'] === 'Revised') {
+    $_SESSION['quotation_error'] = "This quotation has already been revised. Please revise the latest revision instead.";
     header("Location: " . BASE_URL . "modules/quotations/draft_quotation_list.php");
+    exit();
+}
+if ($quotation['status'] === 'Accepted') {
+    $_SESSION['quotation_error'] = "Accepted quotations cannot be revised.";
+    header("Location: " . BASE_URL . "modules/quotations/accepted_quotation_list.php");
     exit();
 }
 
 // Fetch quotation items
-$itemSql = "SELECT qi.*, p.name as product_name, p.lkr_price, p.usd_price
-            FROM quotation_items qi
-            LEFT JOIN products p ON qi.product_id = p.id
-            WHERE qi.quotation_id = ?
-            ORDER BY qi.id ASC";
+$itemSql = "SELECT qi.* FROM quotation_items qi WHERE qi.quotation_id = ? ORDER BY qi.id ASC";
 $stmt = $conn->prepare($itemSql);
 $stmt->bind_param("i", $quotation_id);
 $stmt->execute();
@@ -61,27 +60,27 @@ while ($row = $items_result->fetch_assoc()) {
     $quotation_items[] = $row;
 }
 
-// Fetch products list
-$sql = "SELECT id, name, description, lkr_price, usd_price FROM products WHERE status = 'active' ORDER BY name ASC";
-$result = $conn->query($sql);
+// Get revision chain for this quotation
+$revision_chain = getQuotationRevisionChain($conn, $quotation_id);
 
+// Determine display info
+$display_ref_no = !empty($quotation['ref_no'])
+    ? htmlspecialchars($quotation['ref_no'])
+    : htmlspecialchars(generateRefNo($conn, $quotation_id, $quotation['quotation_date'], 'QT'));
+
+$rev_label = ($quotation['revision_no'] == 0) ? 'Original' : 'R' . $quotation['revision_no'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
-    <title>Edit Quotation #<?php echo htmlspecialchars($quotation_id); ?></title>
-    <!-- Select2 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <title>Revise Quotation <?php echo $display_ref_no; ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 
         .quotation-container {
             margin: 0;
@@ -216,7 +215,7 @@ $result = $conn->query($sql);
         }
 
         .validation-error::before {
-            content: "⚠";
+            content: "\26A0";
             font-size: 11px;
         }
 
@@ -246,8 +245,7 @@ $result = $conn->query($sql);
             color: #667085;
         }
 
-        input.form-control,
-        select.form-select {
+        input.form-control, select.form-select {
             height: 40px;
             padding: 8px 12px;
         }
@@ -389,7 +387,7 @@ $result = $conn->query($sql);
             font-size: 14px;
             color: #667085;
         }
-        
+
         .status-pill {
             display: inline-flex;
             align-items: center;
@@ -400,6 +398,26 @@ $result = $conn->query($sql);
             color: #b78103;
             font-size: 12px;
             font-weight: 600;
+        }
+
+        .revise-banner {
+            background: linear-gradient(135deg, #f0f0ff 0%, #eef2ff 100%);
+            border: 1px solid #c7d2fe;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .revise-banner i {
+            font-size: 24px;
+            color: #4338ca;
+        }
+
+        .revise-banner strong {
+            color: #4338ca;
         }
     </style>
 </head>
@@ -422,15 +440,27 @@ $result = $conn->query($sql);
                 </div>
                 <div class="page-header d-flex justify-content-between align-items-center">
                     <div>
-                        <h5 class="mb-1">Edit Quotation #<?php echo htmlspecialchars($quotation_id); ?></h5>
-                        <p class="text-muted mb-0">Update the details below to modify this draft quotation</p>
+                        <h5 class="mb-1">Revise Quotation <?php echo $display_ref_no; ?></h5>
+                        <p class="text-muted mb-0">Create a new revision of this quotation. The previous version will be preserved.</p>
                     </div>
-                    <span class="status-pill"><i class="fas fa-clock"></i> Draft</span>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="badge-revision"><?php echo $rev_label; ?></span>
+                        <span class="status-pill"><i class="fas fa-history"></i> Creating Revision</span>
+                    </div>
                 </div>
+
+                <div class="revise-banner">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>You are creating Revision #<?php echo count($revision_chain) + 1; ?></strong>
+                        for this quotation. The current version will be marked as "Revised" and preserved. The new revision will become the active "Draft".
+                    </div>
+                </div>
+
                 <div class="quotation-container">
-                    <form method="post" action="<?= BASE_URL ?>modules/quotations/update_quotation.php" id="quotationForm">
-                        <input type="hidden" name="quotation_id" value="<?php echo $quotation_id; ?>">
-                        
+                    <form method="post" action="<?= BASE_URL ?>modules/quotations/process_revise_quotation.php" id="quotationForm">
+                        <input type="hidden" name="original_quotation_id" value="<?php echo $quotation_id; ?>">
+
                         <!-- Quotation Details Section -->
                         <div class="card mb-3">
                             <div class="card-body">
@@ -443,7 +473,7 @@ $result = $conn->query($sql);
                                         <div>
                                             <label class="form-label">Status</label>
                                             <select class="form-select bg-light" disabled>
-                                                <option value="Draft" selected>Draft</option>
+                                                <option value="Draft" selected>Draft (New Revision)</option>
                                             </select>
                                             <input type="hidden" name="quotation_status" value="Draft">
                                         </div>
@@ -507,6 +537,12 @@ $result = $conn->query($sql);
                                                 value="<?php echo htmlspecialchars($quotation['customer_name']); ?>">
                                         </div>
                                         <div class="mt-3">
+                                            <label class="form-label">Business Name</label>
+                                            <input type="text" class="form-control" name="customer_business_name"
+                                                id="customer_business_name" placeholder="Enter business name (optional)"
+                                                value="<?php echo htmlspecialchars($quotation['customer_business_name'] ?? ''); ?>">
+                                        </div>
+                                        <div class="mt-3">
                                             <label class="form-label">Email</label>
                                             <input type="email" class="form-control" name="customer_email"
                                                 id="customer_email" placeholder="customer@example.com"
@@ -517,7 +553,7 @@ $result = $conn->query($sql);
                                         <div>
                                             <label class="form-label">Phone</label>
                                             <input type="text" class="form-control" name="customer_phone"
-                                                id="customer_phone" placeholder="+94 77 123 4567"
+                                                id="customer_phone" placeholder="077 123 4567" maxlength="10" pattern="[0-9]{10}" inputmode="numeric"
                                                 value="<?php echo htmlspecialchars($quotation['customer_phone'] ?? ''); ?>">
                                         </div>
                                         <div class="mt-3">
@@ -536,14 +572,14 @@ $result = $conn->query($sql);
                             <div class="card-body">
                                 <div class="d-flex align-items-center gap-2 mb-3">
                                     <i class="fas fa-box text-primary" style="font-size: 18px;"></i>
-                                    <h6 class="card-title m-0">Products</h6>
+                                    <h6 class="card-title m-0">Items</h6>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table align-middle" id="quotation_table" style="table-layout: fixed; width: 100%;">
                                         <thead>
                                             <tr>
                                                 <th style="width: 46px;">#</th>
-                                                <th style="width: 220px;">Product</th>
+                                                <th style="width: 220px;">Item</th>
                                                 <th style="width: 200px;">Description</th>
                                                 <th style="width: 110px;">Price</th>
                                                 <th style="width: 60px;">Qty</th>
@@ -554,12 +590,11 @@ $result = $conn->query($sql);
                                         </thead>
                                         <tbody>
                                             <?php if (!empty($quotation_items)): ?>
-                                                <?php 
+                                                 <?php
                                                 $itemIndex = 0;
-                                                foreach ($quotation_items as $item): 
+                                                foreach ($quotation_items as $item):
                                                     $itemIndex++;
-                                                    $product_id = $item['product_id'] ?? '';
-                                                    $product_name = $item['product_name'] ?? ($item['qi_product_name'] ?? '');
+                                                    $product_name = $item['product_name'] ?? '';
                                                     $description = $item['description'] ?? '';
                                                     $price = $item['price'] ?? 0;
                                                     $qty = $item['quantity'] ?? 1;
@@ -570,24 +605,7 @@ $result = $conn->query($sql);
                                                 <tr>
                                                     <td class="text-center text-muted" style="font-size: 13px; font-weight: 500;"><?php echo $itemIndex; ?></td>
                                                     <td>
-                                                        <select name="quotation_product[]" class="form-select product-select">
-                                                            <option value="">-- Select Product --</option>
-                                                            <?php 
-                                                            $result->data_seek(0);
-                                                            while ($row = $result->fetch_assoc()): 
-                                                                $selected = ($row['id'] == $product_id) ? 'selected' : '';
-                                                            ?>
-                                                                <option value="<?= $row['id'] ?>"
-                                                                    data-lkr-price="<?= $row['lkr_price'] ?>"
-                                                                    data-description="<?= htmlspecialchars($row['description']) ?>"
-                                                                    <?php echo $selected; ?>>
-                                                                    <?= htmlspecialchars($row['name']) ?>
-                                                                </option>
-                                                            <?php endwhile; ?>
-                                                            <?php if (!empty($product_name) && empty($product_id)): ?>
-                                                                <option value="<?php echo htmlspecialchars($product_name); ?>" selected><?php echo htmlspecialchars($product_name); ?></option>
-                                                            <?php endif; ?>
-                                                        </select>
+                                                        <input type="text" name="quotation_product[]" class="form-control item-name" placeholder="Enter item name" value="<?php echo htmlspecialchars($product_name); ?>">
                                                     </td>
                                                     <td>
                                                         <input type="text" name="quotation_product_description[]"
@@ -641,18 +659,7 @@ $result = $conn->query($sql);
                                                 <tr>
                                                     <td class="text-center text-muted" style="font-size: 13px; font-weight: 500;">1</td>
                                                     <td>
-                                                        <select name="quotation_product[]" class="form-select product-select">
-                                                            <option value="">-- Select Product --</option>
-                                                            <?php
-                                                            $result->data_seek(0);
-                                                            while ($row = $result->fetch_assoc()): ?>
-                                                                <option value="<?= $row['id'] ?>"
-                                                                    data-lkr-price="<?= $row['lkr_price'] ?>"
-                                                                    data-description="<?= htmlspecialchars($row['description']) ?>">
-                                                                    <?= htmlspecialchars($row['name']) ?>
-                                                                </option>
-                                                            <?php endwhile; ?>
-                                                        </select>
+                                                        <input type="text" name="quotation_product[]" class="form-control item-name" placeholder="Enter item name">
                                                     </td>
                                                     <td>
                                                         <input type="text" name="quotation_product_description[]"
@@ -699,7 +706,7 @@ $result = $conn->query($sql);
 
                                 <div class="d-flex justify-content-between align-items-start mt-3 flex-wrap gap-3">
                                     <button type="button" id="add_product" class="btn btn-outline-success btn-sm">
-                                        <i class="fas fa-plus me-1"></i> Add Product
+                                        <i class="fas fa-plus me-1"></i> Add Item
                                     </button>
 
                                     <div class="totals-section">
@@ -776,7 +783,7 @@ $result = $conn->query($sql);
                                 <div class="d-flex justify-content-end gap-2 pt-2">
                                     <a href="<?= BASE_URL ?>modules/quotations/draft_quotation_list.php" class="btn btn-outline-secondary">Cancel</a>
                                     <button type="submit" class="btn btn-primary" id="submit_quotation">
-                                        <i class="fas fa-save me-1"></i> Update Quotation
+                                        <i class="fas fa-history me-1"></i> Create Revision
                                     </button>
                                 </div>
                             </div>
@@ -789,44 +796,7 @@ $result = $conn->query($sql);
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Select2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-    $(document).ready(function() {
-        $('.product-select').select2({
-            theme: 'bootstrap-5',
-            width: '100%',
-            tags: true,
-            createTag: function (params) {
-                var term = $.trim(params.term);
-                if (term === '') {
-                    return null;
-                }
-                return {
-                    id: term,
-                    text: term,
-                    newTag: true
-                }
-            }
-        });
-
-        function updateProductPrice(row) {
-            var selectedOption = row.find('.product-select option:selected');
-            if (selectedOption.val() === "") return;
-
-            var priceField = row.find('.price');
-            var descriptionField = row.find('.product-description');
-            
-            if (selectedOption.data('lkr-price') !== undefined) {
-                var price = parseFloat(selectedOption.data('lkr-price') || 0);
-                var description = selectedOption.data('description') || '';
-
-                priceField.val(isNaN(price) ? '0.00' : price.toFixed(2));
-                descriptionField.val(description);
-            }
-            updateRowTotal(row);
-        }
-
         function getFlatDiscount(row) {
             let price = parseFloat(row.find('.price').val()) || 0;
             let qty = parseFloat(row.find('.qty').val()) || 0;
@@ -906,10 +876,9 @@ $result = $conn->query($sql);
 
         $('#add_product').click(function () {
             let firstRow = $('#quotation_table tbody tr:first');
-            let firstSelect = firstRow.find('.product-select');
-            if (firstSelect.hasClass('select2-hidden-accessible')) { firstSelect.select2('destroy'); }
             let newRow = firstRow.clone();
             newRow.find('input').val('');
+            newRow.find('.item-name').val('');
             newRow.find('.price').val('0.00');
             newRow.find('.qty').val('1');
             newRow.find('.discount').val('0');
@@ -917,24 +886,7 @@ $result = $conn->query($sql);
             newRow.find('.discount-group .discount-type-btn').removeClass('active');
             newRow.find('.discount-group .discount-type-btn[data-type="flat"]').addClass('active');
             newRow.find('.subtotal').val('0.00');
-            newRow.find('.product-select').val('');
             $('#quotation_table tbody').append(newRow);
-            $('.product-select').select2({
-                theme: 'bootstrap-5',
-                width: '100%',
-                tags: true,
-                createTag: function (params) {
-                    var term = $.trim(params.term);
-                    if (term === '') {
-                        return null;
-                    }
-                    return {
-                        id: term,
-                        text: term,
-                        newTag: true
-                    }
-                }
-            });
             renumberRows();
         });
 
@@ -944,21 +896,19 @@ $result = $conn->query($sql);
                 updateTotals();
                 renumberRows();
             } else {
-                showToast('warning', 'At least one product is required.');
+                showToast('warning', 'At least one item is required.');
             }
         });
 
-        $(document).on('change', '.product-select', function () { updateProductPrice($(this).closest('tr')); });
         $(document).on('input', '#vat_percentage', function () { updateTotals(); });
-        $(document).on('input', '.price, .qty, .discount', function () { 
+        $(document).on('input', '.price, .qty, .discount', function () {
             if ($(this).hasClass('qty')) {
                 let value = $(this).val();
                 $(this).val(value.replace(/[^0-9]/g, ''));
             }
-            updateRowTotal($(this).closest('tr')); 
+            updateRowTotal($(this).closest('tr'));
         });
-        
-        // Discount type toggle
+
         $(document).on('click', '.discount-type-btn', function () {
             let btnGroup = $(this).closest('.discount-group');
             btnGroup.find('.discount-type-btn').removeClass('active');
@@ -968,8 +918,7 @@ $result = $conn->query($sql);
             row.find('.discount-type-hidden').val(type);
             updateRowTotal(row);
         });
-        
-        // Update expiry date when quotation date changes
+
         $('input[name="quotation_date"]').on('change', function() {
             const qDate = new Date($(this).val());
             if (!isNaN(qDate.getTime())) {
@@ -978,11 +927,45 @@ $result = $conn->query($sql);
                 $('input[name="expiry_date"]').val(expDate.toISOString().split('T')[0]);
             }
         });
-    });
+
+        $('#quotationForm').on('submit', function(e) {
+            if ($('#quotation_table tbody tr').length === 0) {
+                showToast('warning', 'Please add at least one item to the quotation.');
+                e.preventDefault();
+                return false;
+            }
+
+            let isItemValid = true;
+            $('#quotation_table tbody tr').each(function () {
+                let itemName = $(this).find('.item-name');
+                if (itemName.val().trim() === "") {
+                    showToast('warning', 'Please enter a name for all quotation items.');
+                    isItemValid = false;
+                    return false;
+                }
+            });
+
+            if (!isItemValid) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        var initialFormData = $('#quotationForm').serialize();
+        function checkFormChanges() {
+            var currentFormData = $('#quotationForm').serialize();
+            if (currentFormData === initialFormData) {
+                $('#submit_quotation').prop('disabled', true).addClass('disabled');
+            } else {
+                $('#submit_quotation').prop('disabled', false).removeClass('disabled');
+            }
+        }
+        checkFormChanges();
+        $('#quotationForm').on('change input', 'input, select, textarea', checkFormChanges);
     </script>
     <script src="<?= BASE_URL ?>js/scripts.js"></script>
 </body>
-</html>
 <?php
 $conn->close();
 ?>
+</html>

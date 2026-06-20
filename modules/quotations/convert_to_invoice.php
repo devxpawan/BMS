@@ -28,6 +28,7 @@ try {
 
     if (!$quotation) throw new Exception("Quotation not found");
     if ($quotation['status'] === 'Accepted') throw new Exception("Quotation already converted to invoice");
+    if ($quotation['status'] === 'Revised') throw new Exception("Cannot convert a revised quotation. Please use the latest revision.");
 
     // 2. Create Invoice
     $issue_date = date('Y-m-d');
@@ -39,7 +40,7 @@ try {
     $insertInvSql = "INSERT INTO invoices (customer_id, user_id, issue_date, due_date, total_amount, discount, vat, pay_status, status, currency, quotation_ref_no, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($insertInvSql);
     $vat_default = 0;
-    $stmt->bind_param("iissdddsssss", $quotation['customer_id'], $quotation['user_id'], $issue_date, $due_date, $quotation['total_amount'], $quotation['discount'], $vat_default, $pay_status, $status, $quotation['currency'], $quotation_ref_no, $quotation['notes']);
+    $stmt->bind_param("iissdddsssss", $quotation['customer_id'], $_SESSION['user_id'], $issue_date, $due_date, $quotation['total_amount'], $quotation['discount'], $vat_default, $pay_status, $status, $quotation['currency'], $quotation_ref_no, $quotation['notes']);
     $stmt->execute();
     $invoice_id = $conn->insert_id;
     
@@ -57,12 +58,12 @@ try {
     $stmt->execute();
     $items = $stmt->get_result();
 
-    $insertItemSql = "INSERT INTO invoice_items (invoice_id, product_id, product_name, quantity, description, discount, discount_type, total_amount, status, pay_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 'unpaid')";
+    $insertItemSql = "INSERT INTO invoice_items (invoice_id, product_name, quantity, description, discount, discount_type, total_amount, status, pay_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'unpaid')";
     $item_stmt = $conn->prepare($insertItemSql);
 
     while ($item = $items->fetch_assoc()) {
         $discount_type = $item['discount_type'] ?? 'flat';
-        $item_stmt->bind_param("iisisdsd", $invoice_id, $item['product_id'], $item['product_name'], $item['quantity'], $item['description'], $item['discount'], $discount_type, $item['total_amount']);
+        $item_stmt->bind_param("isisdsd", $invoice_id, $item['product_name'], $item['quantity'], $item['description'], $item['discount'], $discount_type, $item['total_amount']);
         $item_stmt->execute();
     }
 

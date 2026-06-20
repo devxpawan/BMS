@@ -15,11 +15,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit(); // Stop execution immediately
 }
 
-// Admin-only access
-if (!isset($_SESSION['role_id']) || $_SESSION['role_id'] != 1) {
-    header("Location: " . BASE_URL . "index.php");
-    exit();
-}
+
 
 // Include necessary files
 require_once BASE_PATH . 'includes/db_connection.php';
@@ -68,21 +64,10 @@ if (!isset($_SESSION['csrf_token'])) {
     $mobile = isset($_GET['mobile']) ? urldecode($_GET['mobile']) : $user['mobile'];
     $nic = isset($_GET['nic']) ? urldecode($_GET['nic']) : $user['nic'];
     $address = isset($_GET['address']) ? urldecode($_GET['address']) : $user['address'];
-    $role_id = isset($_GET['role_id']) ? $_GET['role_id'] : $user['role_id'];
     $position_id = isset($_GET['position_id']) ? $_GET['position_id'] : ($user['position_id'] ?? '');
 
     // Check if current user is editing their own account
     $is_editing_self = ($user_id == $_SESSION['user_id']);
-
-    // Fetch available roles dynamically
-    $roles = [];
-    $roleQuery = "SELECT id, name FROM roles";
-    $roleResult = $conn->query($roleQuery);
-
-    // Collect roles into an array
-    while ($roleRow = $roleResult->fetch_assoc()) {
-        $roles[] = $roleRow;
-    }
 
     // Fetch available positions dynamically
     $positions = [];
@@ -92,6 +77,7 @@ if (!isset($_SESSION['csrf_token'])) {
     while ($positionRow = $positionResult->fetch_assoc()) {
         $positions[] = $positionRow;
     }
+
     ?>
 
 <!DOCTYPE html>
@@ -103,15 +89,7 @@ if (!isset($_SESSION['csrf_token'])) {
     <!-- Select2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
-    <style>
-        body {
-            background-color: #f8fafc;
-        }
-
-        .form-floating .form-control {
-            height: calc(3.5rem + 2px);
-        }
-    </style>
+    <style></style>
 </head>
 
 <body class="sb-nav-fixed">
@@ -152,7 +130,7 @@ if (!isset($_SESSION['csrf_token'])) {
                                 <!-- User Details Section -->
                                 <div class="col-md-6">
                                     <div class="premium-section-header">
-                                        <i class="fas fa-user-circle me-2"></i> User Details
+                                        <i class="fas fa-user-circle"></i> User Details
                                     </div>
 
                                         <!-- Name Field -->
@@ -208,7 +186,7 @@ if (!isset($_SESSION['csrf_token'])) {
                                     <!-- Additional Details Section -->
                                     <div class="col-md-6">
                                         <div class="premium-section-header">
-                                            <i class="fas fa-user-shield me-2"></i> Configuration Details
+                                            <i class="fas fa-user-shield"></i> Configuration Details
                                         </div>
                                         
                                         <!-- NIC Field -->
@@ -227,26 +205,11 @@ if (!isset($_SESSION['csrf_token'])) {
                                                 placeholder="Enter Full Address" rows="3" data-original="<?php echo htmlspecialchars($address); ?>"><?php echo htmlspecialchars($address); ?></textarea>
                                         </div>
 
-                                        <!-- Role Field - Dynamically Populated -->
-                                        <div class="mb-3">
-                                            <label for="role_id" class="form-label">Role</label>
-                                            <select class="form-select" id="role_id" name="role_id" required data-original="<?php echo htmlspecialchars($role_id); ?>">
-                                                <option value="">Select Role...</option>
-                                                <?php foreach ($roles as $role): ?>
-                                                    <option value="<?= htmlspecialchars($role['id']) ?>" 
-                                                            <?php echo ($role['id'] == $role_id) ? 'selected' : ''; ?>>
-                                                        <?= htmlspecialchars($role['name']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <div class="error-feedback" id="role-error"></div>
-                                        </div>
-
                                         <!-- Position Field - Dynamically Populated -->
                                         <div class="mb-3">
-                                            <label for="position_id" class="form-label">Position</label>
-                                            <select class="form-select" id="position_id" name="position_id" data-original="<?php echo htmlspecialchars($position_id); ?>">
-                                                <option value="">Select Position (Optional)...</option>
+                                            <label for="position_id" class="form-label">Position <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="position_id" name="position_id" data-original="<?php echo htmlspecialchars($position_id); ?>" required>
+                                                <option value="">Select Position...</option>
                                                 <?php foreach ($positions as $position): ?>
                                                     <option value="<?= htmlspecialchars($position['id']) ?>" 
                                                             <?php echo (!empty($position_id) && $position['id'] == $position_id) ? 'selected' : ''; ?>>
@@ -260,12 +223,12 @@ if (!isset($_SESSION['csrf_token'])) {
 
                                 <!-- Submit Buttons -->
                                 <div class="row mt-4 pt-3 border-top">
-                                    <div class="col-12 d-flex justify-content-end gap-3">
+                                    <div class="col-12 d-flex justify-content-end gap-2">
                                         <a href="<?= BASE_URL ?>modules/users/users.php" class="back-btn text-decoration-none d-flex align-items-center">
-                                            <i class="fas fa-arrow-left me-2"></i> Cancel
+                                            <i class="fas fa-arrow-left me-1"></i> Cancel
                                         </a>
                                         <button type="submit" class="save-btn" id="submitBtn" disabled>
-                                            <i class="fas fa-save me-2"></i> Save Changes
+                                            <i class="fas fa-save me-1"></i> Save Changes
                                         </button>
                                     </div>
                                 </div>
@@ -291,12 +254,6 @@ if (!isset($_SESSION['csrf_token'])) {
             minimumResultsForSearch: Infinity
         });
 
-        $('#role_id').select2({
-            theme: 'bootstrap-5',
-            width: '100%',
-            minimumResultsForSearch: Infinity
-        });
-
         $('#position_id').select2({
             theme: 'bootstrap-5',
             width: '100%',
@@ -306,7 +263,7 @@ if (!isset($_SESSION['csrf_token'])) {
         });
 
         // Trigger change detection for Select2-managed dropdowns
-        $('#status, #role_id, #position_id').on('select2:select select2:unselect', function () {
+        $('#status, #position_id').on('select2:select select2:unselect', function () {
             checkForChanges();
         });
     });
@@ -583,21 +540,6 @@ function validateNIC(nic) {
     };
 }
 
-// Role validation function
-function validateRole(roleId) {
-    if (roleId.trim() === '') {
-        return {
-            valid: false,
-            message: 'Please select a role'
-        };
-    }
-    
-    return {
-        valid: true,
-        message: ''
-    };
-}
-
 // Setup validation for input fields with real-time feedback
 function setupValidation(inputId, validationFunction, errorId) {
     const inputElement = document.getElementById(inputId);
@@ -695,9 +637,9 @@ mobileInput.addEventListener('input', function(e) {
 });
 
 // Real-time availability check via AJAX
-function checkFieldAvailability(endpoint, paramName, value, excludeId, callback) {
+function checkFieldAvailability(fieldName, paramName, value, excludeId, callback) {
     const xhr = new XMLHttpRequest();
-    let url = '<?= BASE_URL ?>modules/api/' + endpoint + '?' + paramName + '=' + encodeURIComponent(value);
+    let url = '<?= BASE_URL ?>modules/api/check_field.php?field=' + fieldName + '&' + paramName + '=' + encodeURIComponent(value);
     if (excludeId) {
         url += '&exclude_id=' + encodeURIComponent(excludeId);
     }
@@ -723,8 +665,6 @@ const validatePasswordField = setupValidation('password', validatePassword, 'pas
 const validateMobileField = setupValidation('mobile', validateMobile, 'mobile-error');
 const validateNICField = setupValidation('nic', validateNIC, 'nic-error');
 const validateAddressField = setupValidation('address', validateAddress, 'address-error');
-const validateRoleField = setupValidation('role_id', validateRole, 'role-error');
-
 const currentUserId = <?php echo $user_id; ?>;
 
 // Enhanced username validation with real-time availability check
@@ -769,7 +709,7 @@ const validateUsernameField = function() {
             return;
         }
 
-        checkFieldAvailability('check_username.php', 'username', value, currentUserId, function(response) {
+        checkFieldAvailability('username', 'username', value, currentUserId, function(response) {
             usernameChecked = true;
             if (response.available) {
                 usernameInput.classList.add('is-valid');
@@ -840,7 +780,7 @@ const validateEmailFieldAsync = function() {
             return;
         }
 
-        checkFieldAvailability('check_email.php', 'email', value, currentUserId, function(response) {
+        checkFieldAvailability('email', 'email', value, currentUserId, function(response) {
             emailChecked = true;
             if (response.available) {
                 emailInput.classList.add('is-valid');
@@ -870,17 +810,163 @@ emailInput.addEventListener('blur', function() {
     validateEmailFieldAsync();
 });
 
+// Enhanced NIC validation with real-time availability check
+const nicInput = document.getElementById('nic');
+const nicError = document.getElementById('nic-error');
+let nicAvailable = true;
+let nicChecked = true;
+let nicCheckTimer;
+
+const validateNICFieldAsync = function() {
+    return new Promise((resolve) => {
+        const value = nicInput.value.trim();
+        const originalValue = nicInput.getAttribute('data-original');
+        nicInput.classList.remove('is-invalid');
+        nicInput.classList.remove('is-valid');
+        nicError.style.display = 'none';
+
+        // Empty check (NIC is optional)
+        if (value === '') {
+            nicInput.classList.remove('is-valid');
+            nicInput.classList.remove('is-invalid');
+            nicAvailable = true;
+            nicChecked = true;
+            resolve(true);
+            return;
+        }
+
+        // Format check (use existing validateNIC)
+        const formatResult = validateNIC(value);
+        if (!formatResult.valid) {
+            nicInput.classList.add('is-invalid');
+            nicError.textContent = formatResult.message;
+            nicError.style.display = 'block';
+            nicChecked = false;
+            resolve(false);
+            return;
+        }
+
+        if (value === originalValue) {
+            nicInput.classList.add('is-valid');
+            nicAvailable = true;
+            nicChecked = true;
+            resolve(true);
+            return;
+        }
+
+        checkFieldAvailability('nic', 'nic', value, currentUserId, function(response) {
+            nicChecked = true;
+            if (response.available) {
+                nicInput.classList.add('is-valid');
+                nicAvailable = true;
+                resolve(true);
+            } else {
+                nicInput.classList.add('is-invalid');
+                nicError.textContent = response.message || 'NIC number is already in use';
+                nicError.style.display = 'block';
+                nicAvailable = false;
+                resolve(false);
+            }
+        });
+    });
+};
+
+nicInput.addEventListener('input', function() {
+    clearTimeout(nicCheckTimer);
+    nicCheckTimer = setTimeout(() => {
+        validateNICFieldAsync();
+        checkForChanges();
+    }, 600);
+});
+
+nicInput.addEventListener('blur', function() {
+    clearTimeout(nicCheckTimer);
+    validateNICFieldAsync();
+});
+
+// Enhanced mobile validation with real-time availability check
+const mobileError = document.getElementById('mobile-error');
+let mobileAvailable = true;
+let mobileChecked = true;
+let mobileCheckTimer;
+
+const validateMobileFieldAsync = function() {
+    return new Promise((resolve) => {
+        const value = mobileInput.value.replace(/\D/g, ''); // Ensure digits only
+        const originalValue = mobileInput.getAttribute('data-original').replace(/\D/g, '');
+        mobileInput.classList.remove('is-invalid', 'is-valid');
+        mobileError.style.display = 'none';
+
+        // Empty check (mobile is optional)
+        if (value === '') {
+            mobileInput.classList.remove('is-valid', 'is-invalid');
+            mobileAvailable = true;
+            mobileChecked = true;
+            resolve(true);
+            return;
+        }
+
+        // Format check
+        const formatResult = validateMobile(mobileInput.value);
+        if (!formatResult.valid) {
+            mobileInput.classList.add('is-invalid');
+            mobileError.textContent = formatResult.message;
+            mobileError.style.display = 'block';
+            mobileChecked = false;
+            resolve(false);
+            return;
+        }
+
+        // Skip API call if value hasn't changed
+        if (value === originalValue) {
+            mobileInput.classList.add('is-valid');
+            mobileAvailable = true;
+            mobileChecked = true;
+            resolve(true);
+            return;
+        }
+
+        // Check availability via AJAX
+        checkFieldAvailability('mobile', 'mobile', value, currentUserId, function(response) {
+            mobileChecked = true;
+            if (response.available) {
+                mobileInput.classList.add('is-valid');
+                mobileAvailable = true;
+                resolve(true);
+            } else {
+                mobileInput.classList.add('is-invalid');
+                mobileError.textContent = response.message || 'Mobile number is already in use';
+                mobileError.style.display = 'block';
+                mobileAvailable = false;
+                resolve(false);
+            }
+        });
+    });
+};
+
+mobileInput.addEventListener('input', function() {
+    clearTimeout(mobileCheckTimer);
+    mobileCheckTimer = setTimeout(() => {
+        validateMobileFieldAsync();
+        checkForChanges();
+    }, 600);
+});
+
+mobileInput.addEventListener('blur', function() {
+    clearTimeout(mobileCheckTimer);
+    validateMobileFieldAsync();
+});
+
 // Client-side form validation
 document.getElementById('editUserForm').addEventListener('submit', function(event) {
     let isValid = true;
     
     if (!validateNameField()) isValid = false;
     if (!validatePasswordField()) isValid = false;
-    if (!validateMobileField()) isValid = false;
+    if (!validateMobileField()) isValid = false; // Synchronous check
     if (!validateNICField()) isValid = false;
     if (!validateAddressField()) isValid = false;
-    if (!validateRoleField()) isValid = false;
-
+    
     const usernameVal = usernameInput.value.trim();
     const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
     if (!usernameVal || !usernameRegex.test(usernameVal)) {
@@ -905,12 +991,17 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
 
     const needUsernameCheck = !usernameChecked || !usernameAvailable;
     const needEmailCheck = !emailChecked || !emailAvailable;
+    const needNICCheck = !nicChecked || !nicAvailable;
+    const needMobileCheck = !mobileChecked || !mobileAvailable;
 
-    if (needUsernameCheck || needEmailCheck) {
+    if (needUsernameCheck || needEmailCheck || needNICCheck || needMobileCheck) {
         event.preventDefault();
         const promises = [];
         if (needUsernameCheck) promises.push(validateUsernameField());
         if (needEmailCheck) promises.push(validateEmailFieldAsync());
+        if (needNICCheck) promises.push(validateNICFieldAsync());
+        if (needMobileCheck) promises.push(validateMobileFieldAsync());
+        
         Promise.all(promises).then(function(results) {
             if (results.every(r => r === true)) {
                 document.getElementById('editUserForm').submit();
@@ -920,8 +1011,8 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
     }
 
     // Check if any field has changed
-    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
+    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'position_id'];
     for (const id of fields) {
         const el = document.getElementById(id);
         if (el && !el.disabled && el.value !== el.getAttribute('data-original')) {
@@ -941,8 +1032,8 @@ document.getElementById('editUserForm').addEventListener('submit', function(even
 
 // Enable/disable submit button based on whether any field changed
 function checkForChanges() {
-    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id'];
     let hasChanged = false;
+    const fields = ['name', 'username', 'email', 'mobile', 'nic', 'address', 'position_id'];
     for (const id of fields) {
         const el = document.getElementById(id);
         if (el && !el.disabled && el.value !== el.getAttribute('data-original')) {
@@ -958,7 +1049,7 @@ function checkForChanges() {
 }
 
 // Attach listeners to all tracked fields
-['name', 'username', 'email', 'mobile', 'nic', 'address', 'role_id', 'position_id', 'password'].forEach(function(id) {
+['name', 'username', 'email', 'mobile', 'nic', 'address', 'position_id', 'password'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
         el.addEventListener('input', checkForChanges);

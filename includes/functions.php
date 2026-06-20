@@ -1,93 +1,37 @@
 <?php
 require_once __DIR__ . '/../config/paths.php';
 
-function showAlert($message, $type = 'success') {
-    $toastType = $type === 'danger' ? 'error' : $type;
-    echo "<script>document.addEventListener('DOMContentLoaded', function() { showToast('" . addslashes($toastType) . "', '" . addslashes($message) . "'); });</script>";
+// Permission check helper
+function hasAccess($permission) {
+    $access = $_SESSION['user_access'] ?? [];
+    return in_array($permission, $access, true);
 }
 
-function sanitizeInput($data) {
-    return htmlspecialchars(trim($data));
+// Approval helper
+function isApprover() {
+    return isset($_SESSION['is_approver']) && $_SESSION['is_approver'] === true;
 }
 
-// RBAC Helper Functions
-function getUserRoleId() {
-    return isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
+function hasApprovedEditRequest($conn, $invoice_id, $user_id) {
+    $stmt = $conn->prepare("SELECT id FROM invoice_edit_requests WHERE invoice_id = ? AND requester_id = ? AND status = 'approved' LIMIT 1");
+    $stmt->bind_param("ii", $invoice_id, $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $exists = $result->num_rows > 0;
+    $stmt->close();
+    return $exists;
 }
 
-function isAdmin() {
-    return getUserRoleId() === 1;
+function hasPendingEditRequest($conn, $invoice_id, $user_id) {
+    $stmt = $conn->prepare("SELECT id FROM invoice_edit_requests WHERE invoice_id = ? AND requester_id = ? AND status = 'pending' LIMIT 1");
+    $stmt->bind_param("ii", $invoice_id, $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $exists = $result->num_rows > 0;
+    $stmt->close();
+    return $exists;
 }
 
-function isModerator() {
-    return getUserRoleId() === 3;
-}
-
-function isUser() {
-    return getUserRoleId() === 2;
-}
-
-function canManageUsers() {
-    return isAdmin();
-}
-
-function canManageSettings() {
-    return isAdmin();
-}
-
-function canViewLogs() {
-    return isAdmin();
-}
-
-function canApproveRejectInquiries() {
-    return isAdmin() || isModerator();
-}
-
-function canEditRecords() {
-    return isAdmin() || isModerator();
-}
-
-function canDeleteRecords() {
-    return isAdmin();
-}
-
-function canAddCustomers() {
-    return isAdmin() || isModerator();
-}
-
-function canAddProducts() {
-    return isAdmin() || isModerator();
-}
-
-function canEditProducts() {
-    return isAdmin() || isModerator();
-}
-
-function canCreateInvoices() {
-    return true; // All roles can create invoices
-}
-
-function canCancelInvoices() {
-    return isAdmin() || isModerator();
-}
-
-// Redirect if user lacks required role, with optional error message
-function requireRole($allowedRoles, $redirectPage = 'index.php') {
-    if (!in_array(getUserRoleId(), $allowedRoles)) {
-        header("Location: $redirectPage");
-        exit();
-    }
-}
-
-// Deny access if not Admin
-function requireAdmin($redirectPage = 'index.php') {
-    if (!isAdmin()) {
-        header("Location: $redirectPage");
-        exit();
-    }
-}
-
-// Load company settings (single-row). Returns array; empty fields stay empty.
 function getCompanyInfo($conn) {
     $defaults = [
         'company_name'   => '',
@@ -113,7 +57,6 @@ function getCompanyInfo($conn) {
     return $defaults;
 }
 
-// Build a query string from $_GET params, excluding specified keys and empty values
 function buildQueryString($exclude = [], $extra = []) {
     $parts = [];
     foreach ($_GET as $key => $value) {
@@ -129,58 +72,96 @@ function buildQueryString($exclude = [], $extra = []) {
     return implode('&', $parts);
 }
 
-// Render pagination HTML
-function renderPagination($page, $totalPages, $search = '') {
+function renderPagination($page, $totalPages) {
     if ($totalPages <= 1) return '';
     $html = '<nav aria-label="Page navigation"><ul class="pagination mb-0">';
-    
-    // Previous
     $prevDisabled = $page <= 1 ? 'disabled' : '';
     $html .= '<li class="page-item ' . $prevDisabled . '">
         <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $page - 1]) . '">
             <i class="fas fa-chevron-left"></i>
         </a>
     </li>';
-    
     $maxPagesToShow = 5;
     $startPage = max(1, min($page - floor($maxPagesToShow / 2), $totalPages - $maxPagesToShow + 1));
     $endPage = min($totalPages, $startPage + $maxPagesToShow - 1);
-    
     if ($startPage > 1) {
         $html .= '<li class="page-item"><a class="page-link" href="?' . buildQueryString(['page'], ['page' => 1]) . '">1</a></li>';
         if ($startPage > 2) {
             $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
         }
     }
-    
     for ($i = $startPage; $i <= $endPage; $i++) {
         $active = $page == $i ? 'active' : '';
         $html .= '<li class="page-item ' . $active . '">
             <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $i]) . '">' . $i . '</a>
         </li>';
     }
-    
     if ($endPage < $totalPages) {
         if ($endPage < $totalPages - 1) {
             $html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
         }
         $html .= '<li class="page-item"><a class="page-link" href="?' . buildQueryString(['page'], ['page' => $totalPages]) . '">' . $totalPages . '</a></li>';
     }
-    
-    // Next
     $nextDisabled = $page >= $totalPages ? 'disabled' : '';
     $html .= '<li class="page-item ' . $nextDisabled . '">
         <a class="page-link" href="?' . buildQueryString(['page'], ['page' => $page + 1]) . '">
             <i class="fas fa-chevron-right"></i>
         </a>
     </li>';
-    
     $html .= '</ul></nav>';
     return $html;
 }
 
-// Generate a reference number based on company initials, type, year, and id
-// Example: ABC/QT/26/001
+// --- Quotation Revision Functions ---
+
+function generateRevisedRefNo($original_ref_no, $revision_no) {
+    return $original_ref_no . '-R' . $revision_no;
+}
+
+function getNextRevisionNo($conn, $original_ref_no) {
+    if (empty($original_ref_no)) return 1;
+    $sql = "SELECT MAX(revision_no) as max_rev FROM quotations WHERE original_ref_no = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $original_ref_no);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+    return ($row['max_rev'] ?? 0) + 1;
+}
+
+function getQuotationRevisionChain($conn, $quotation_id) {
+    $sql = "SELECT original_ref_no, ref_no FROM quotations WHERE quotation_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $quotation_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+    if (!$row) return [];
+    $original_ref_no = $row['original_ref_no'] ?? $row['ref_no'];
+    if (empty($original_ref_no)) return [];
+    $chainSql = "SELECT q.*, c.name as customer_name, c.business_name as customer_business_name,
+                 u.name as creator_name
+                 FROM quotations q
+                 LEFT JOIN customers c ON q.customer_id = c.customer_id
+                 LEFT JOIN users u ON q.created_by = u.id
+                 WHERE (q.original_ref_no = ? OR (q.ref_no = ? AND q.original_ref_no IS NULL))
+                 ORDER BY q.revision_no ASC";
+    $stmt = $conn->prepare($chainSql);
+    $stmt->bind_param("ss", $original_ref_no, $original_ref_no);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $chain = [];
+    while ($r = $result->fetch_assoc()) {
+        $chain[] = $r;
+    }
+    $stmt->close();
+    return $chain;
+}
+
+// --- End Quotation Revision Functions ---
+
 function generateRefNo($conn, $id, $date, $type = 'QT') {
     $company = getCompanyInfo($conn);
     $words = explode(' ', preg_replace('/[^a-zA-Z0-9 ]/', '', $company['company_name']));

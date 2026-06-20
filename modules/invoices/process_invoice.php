@@ -45,31 +45,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $customer_email = !empty($_POST['customer_email']) ? trim($_POST['customer_email']) : null;
         $customer_address = $_POST['customer_address'] ?? '';
         $customer_phone = $_POST['customer_phone'] ?? '';
+        $customer_business_name = !empty($_POST['customer_business_name']) ? trim($_POST['customer_business_name']) : null;
         
         // Find or create customer
         $customer_id = 0;
-        $checkCustomerSql = "SELECT customer_id FROM customers WHERE name = ? AND email = ?";
+        $checkCustomerSql = "SELECT customer_id, email, phone, address, business_name FROM customers WHERE name = ?";
         $stmt = $conn->prepare($checkCustomerSql);
-        $stmt->bind_param("ss", $customer_name, $customer_email);
+        $stmt->bind_param("s", $customer_name);
         $stmt->execute();
         $result = $stmt->get_result();
         
         if ($result->num_rows > 0) {
             $customer = $result->fetch_assoc();
             $customer_id = $customer['customer_id'];
+            // Update existing customer details with latest info from form
+            $updateSql = "UPDATE customers SET email = ?, phone = ?, address = ?, business_name = ? WHERE customer_id = ?";
+            $updateStmt = $conn->prepare($updateSql);
+            $updateStmt->bind_param("ssssi", $customer_email, $customer_phone, $customer_address, $customer_business_name, $customer_id);
+            $updateStmt->execute();
+            $updateStmt->close();
         } else {
             // Insert new customer
-            $insertCustomerSql = "INSERT INTO customers (name, email, phone, address, status) 
-                                 VALUES (?, ?, ?, ?, 'Active')";
+            $insertCustomerSql = "INSERT INTO customers (name, email, phone, address, business_name, status) 
+                                 VALUES (?, ?, ?, ?, ?, 'Active')";
             $stmt = $conn->prepare($insertCustomerSql);
-            $stmt->bind_param("ssss", $customer_name, $customer_email, $customer_phone, $customer_address);
+            $stmt->bind_param("sssss", $customer_name, $customer_email, $customer_phone, $customer_address, $customer_business_name);
             $stmt->execute();
             $customer_id = $conn->insert_id;
         }
         
         // Prepare invoice details
         $invoice_date = $_POST['invoice_date'] ?? date('Y-m-d');
-        $due_date = $_POST['due_date'] ?? date('Y-m-d', strtotime('+30 days'));
+        $due_date = !empty($_POST['due_date']) ? $_POST['due_date'] : date('Y-m-d', strtotime('+30 days'));
         $notes = $_POST['notes'] ?? 'Thank you for choosing our services. Please review the invoice details and ensure payment is completed by the due date. If there are any discrepancies, kindly inform us immediately.';
         
         // Always use LKR currency
@@ -116,13 +123,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $subtotal += $row_total;
             $total_discount += $discount;
             
-            // Determine if it's a real product (numeric ID) or custom product (text name)
-            $product_id = is_numeric($product_val) ? intval($product_val) : null;
-            $product_name = is_numeric($product_val) ? null : $product_val;
+            // Always store as text name (no product table dependency)
+            $product_name = $product_val;
             
             // Store item details for insertion
             $invoice_items[] = [
-                'product_id' => $product_id,
                 'product_name' => $product_name,
                 'price' => $price,
                 'qty' => $qty,
@@ -143,18 +148,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             throw new Exception("Invoice total amount must be greater than 0. Please ensure the products selected have a valid price.");
         }
         
-        // Insert invoice - UPDATED to include created_by column
+        $amount_paid = $invoice_status === 'Paid' ? $total_amount : 0;
+
+        // Insert invoice
         $insertInvoiceSql = "INSERT INTO invoices (
             customer_id, user_id, issue_date, due_date, 
-            subtotal, discount, vat, total_amount, 
+            subtotal, discount, vat, total_amount, amount_paid,
             notes, currency, status, pay_status, pay_date, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $conn->prepare($insertInvoiceSql);
         $stmt->bind_param(
-            "iissddddsssssi", 
+            "iissdddddsssssi", 
             $customer_id, $user_id, $invoice_date, $due_date, 
-            $subtotal, $total_discount, $vat_amount, $total_amount, 
+            $subtotal, $total_discount, $vat_amount, $total_amount, $amount_paid,
             $notes, $currency, $status, $pay_status, $pay_date, $user_id
         );
         $stmt->execute();
@@ -169,17 +176,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         // Invoice items insertion
         $insertItemSql = "INSERT INTO invoice_items (
-            invoice_id, product_id, product_name, quantity, discount, discount_type,
+            invoice_id, product_name, quantity, discount, discount_type,
             total_amount, pay_status, status, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($insertItemSql);
         
         foreach ($invoice_items as $item) {
             $item_total = ($item['price'] * $item['qty']) - $item['discount'];
             $stmt->bind_param(
-                "iisidsdsss", 
+                "isidsdsss", 
                 $invoice_id, 
-                $item['product_id'],
                 $item['product_name'],
                 $item['qty'],
                 $item['discount'],

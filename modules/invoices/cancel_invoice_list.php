@@ -19,13 +19,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php'; // Include helper functions
 
-// Only Admin and Moderator can access cancel invoices
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-if ($current_user_role !== 1 && $current_user_role !== 3) {
-    header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
-    exit();
-}
-
 // Initialize filter parameters
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
@@ -38,13 +31,26 @@ $offset = ($page - 1) * $limit;
 // Build base SQL
 $baseFrom = "FROM invoices i 
              LEFT JOIN customers c ON i.customer_id = c.customer_id
-             LEFT JOIN payments p ON i.invoice_id = p.invoice_id
-             LEFT JOIN users u ON p.pay_by = u.id
+             LEFT JOIN (
+                 SELECT p1.invoice_id, p1.payment_method, p1.payment_date, p1.pay_by, u1.name as paid_by_name
+                 FROM payments p1
+                 LEFT JOIN users u1 ON p1.pay_by = u1.id
+                 WHERE p1.payment_id = (
+                     SELECT MAX(p2.payment_id) FROM payments p2 WHERE p2.invoice_id = p1.invoice_id
+                 )
+              ) p ON i.invoice_id = p.invoice_id
+             LEFT JOIN (
+                 SELECT cm1.invoice_id, cm1.credit_memo_id, cm1.credit_memo_no, cm1.amount as cm_amount, cm1.status as cm_status
+                 FROM credit_memos cm1
+                 WHERE cm1.credit_memo_id = (
+                     SELECT MAX(cm2.credit_memo_id) FROM credit_memos cm2 WHERE cm2.invoice_id = cm1.invoice_id
+                 )
+             ) cm ON i.invoice_id = cm.invoice_id
              LEFT JOIN users u2 ON i.created_by = u2.id";
 
 $selectCols = "i.*, c.name as customer_name, c.business_name as customer_business_name,
-               p.payment_id, p.amount_paid, p.payment_method, p.payment_date, p.pay_by,
-               u.name as paid_by_name,
+               p.payment_method, p.payment_date, p.pay_by, p.paid_by_name,
+               cm.credit_memo_id, cm.credit_memo_no, cm.cm_amount, cm.cm_status,
                u2.name as creator_name";
 
 // Build WHERE conditions
@@ -155,7 +161,8 @@ $result = $conn->query($sql);
                                                 <th>Issue Date</th>
                                                 <th>Due Date</th>
                                                 <th>Amount</th>
-                                                <th>Status</th>
+                                                <th>Credit Memo</th>
+                                                <th>Cancel Reason</th>
                                                 <th>Created By</th>
                                                 <th>Actions</th>
                                             </tr>
@@ -193,7 +200,7 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td><?php echo isset($row['issue_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['issue_date']))) : ''; ?>
                                                     </td>
-                                                    <td><?php echo isset($row['due_date']) ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
+                                                    <td><?php echo (isset($row['due_date']) && !empty($row['due_date']) && $row['due_date'] !== '0000-00-00') ? htmlspecialchars(date('d/m/Y', strtotime($row['due_date']))) : ''; ?>
                                                     </td>
                                                     <td>
                                                         <?php
@@ -206,14 +213,30 @@ $result = $conn->query($sql);
 
                                                         if ($payStatus == 'paid'): ?>
                                                             <span class="badge-soft badge-soft-success mt-1">Paid</span>
+                                                        <?php elseif ($payStatus == 'partial'): ?>
+                                                            <span class="badge-soft badge-soft-warning mt-1">Partial</span>
                                                         <?php else: ?>
                                                             <span class="badge-soft badge-soft-danger mt-1">Unpaid</span>
                                                         <?php endif;
                                                         ?>
                                                     </td>
                                                     <td>
-                                                        <span class="badge-soft badge-soft-danger">Canceled</span>
+                                                        <?php if (!empty($row['credit_memo_no'])): ?>
+                                                            <div class="fw-semibold">
+                                                                <a href="<?= BASE_URL ?>modules/credit_memos/download_credit_memo.php?id=<?php echo intval($row['credit_memo_id']); ?>" target="_blank" style="color: #1B1C56;">
+                                                                    <?php echo htmlspecialchars($row['credit_memo_no']); ?>
+                                                                </a>
+                                                            </div>
+                                                            <div class="text-muted" style="font-size: 0.82rem;"><?php echo number_format(floatval($row['cm_amount']), 2); ?>
+                                                                <span class="badge-soft <?= $row['cm_status'] == 'refund' ? 'badge-soft-success' : 'badge-soft-danger' ?>" style="font-size: 9px; padding: 1px 5px;">
+                                                                    <?php echo ucfirst(htmlspecialchars($row['cm_status'])); ?>
+                                                                </span>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">—</span>
+                                                        <?php endif; ?>
                                                     </td>
+                                                    <td><?php echo !empty($row['cancel_reason']) ? htmlspecialchars($row['cancel_reason']) : '<span class="text-muted">-</span>'; ?></td>
                                                     <td>
                                                         <?php 
                                                         if (isset($row['created_by']) && isset($row['creator_name'])) {
@@ -225,6 +248,7 @@ $result = $conn->query($sql);
                                                     </td>
                                                     <td>
                                                         <div class="action-btn-group d-flex gap-1">
+                                                            <?php if (hasAccess('invoices.cancel')): ?>
                                                             <a href="#" class="btn btn-view view-invoice"
                                                                 title="View Invoice"
                                                                 data-id="<?php echo isset($row['invoice_id']) ? $row['invoice_id'] : ''; ?>"
@@ -237,6 +261,7 @@ $result = $conn->query($sql);
                                                                 target="_blank">
                                                                 <i class="fas fa-download"></i>
                                                             </a>
+                                                            <?php endif; ?>
                                                         </div>
                                                     </td>
                                                 </tr>

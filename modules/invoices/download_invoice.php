@@ -28,12 +28,18 @@ $download = isset($_GET['download']) && $_GET['download'] === 'true'; // Trigger
 $invoice_query = "SELECT i.*, i.pay_status AS invoice_pay_status, c.name as customer_name, 
                 c.address as customer_address, c.email as customer_email, c.phone as customer_phone,
                 c.business_name as customer_business_name,
-                p.payment_id, p.amount_paid, p.payment_method, p.payment_date, p.pay_by,
-                r.name as paid_by_name, u.name as user_name
+                p.payment_method, p.payment_date, p.pay_by, p.paid_by_name,
+                u.name as user_name
                 FROM invoices i 
                 LEFT JOIN customers c ON i.customer_id = c.customer_id
-                LEFT JOIN payments p ON i.invoice_id = p.invoice_id
-                LEFT JOIN roles r ON p.pay_by = r.id
+                LEFT JOIN (
+                    SELECT p1.invoice_id, p1.payment_method, p1.payment_date, p1.pay_by, u1.name as paid_by_name
+                    FROM payments p1
+                    LEFT JOIN users u1 ON p1.pay_by = u1.id
+                    WHERE p1.payment_id = (
+                        SELECT MAX(p2.payment_id) FROM payments p2 WHERE p2.invoice_id = p1.invoice_id
+                    )
+                ) p ON i.invoice_id = p.invoice_id
                 LEFT JOIN users u ON i.user_id = u.id
                 WHERE i.invoice_id = ?";
 
@@ -53,13 +59,12 @@ $currency = 'lkr';
 $currencySymbol = 'LKR';
 
 // Modified item query to include item-level discounts
-$itemSql = "SELECT ii.*, ii.pay_status, p.name as product_name, ii.product_name as ii_product_name,
-            COALESCE(ii.description, p.description) as product_description,
+$itemSql = "SELECT ii.*, ii.pay_status, ii.product_name as ii_product_name,
+            ii.description as product_description,
             ii.total_amount as item_subtotal,
             ii.quantity as item_qty,
             COALESCE(ii.discount, 0) as item_discount
             FROM invoice_items ii
-            LEFT JOIN products p ON ii.product_id = p.id
             WHERE ii.invoice_id = ?";
 
 $stmt = $conn->prepare($itemSql);
@@ -72,28 +77,37 @@ while ($item = $itemsResult->fetch_assoc()) {
     $items[] = $item;
 }
 
-// Determine overall invoice payment status
-if (isset($invoice['invoice_pay_status']) && !empty($invoice['invoice_pay_status'])) {
-    $invoicePayStatus = strtolower($invoice['invoice_pay_status']);
+// Determine overall invoice payment status from amount_paid vs total_amount
+$total_amount = floatval($invoice['total_amount']);
+$amount_paid = floatval($invoice['amount_paid'] ?? 0);
+$balance_due = $total_amount - $amount_paid;
+
+if ($amount_paid <= 0) {
+    $invoicePayStatus = 'unpaid';
+} elseif ($amount_paid >= $total_amount) {
+    $invoicePayStatus = 'paid';
 } else {
-    $allItemsPaid = true;
-    $anyItemPaid = false;
+    $invoicePayStatus = 'partial';
+}
 
-    foreach ($items as $item) {
-        if (strtolower($item['pay_status']) == 'paid') {
-            $anyItemPaid = true;
-        } else {
-            $allItemsPaid = false;
-        }
-    }
+// Get payment history
+$paymentHistory = [];
+$payStmt = $conn->prepare("SELECT p.*, u.name as processor_name FROM payments p LEFT JOIN users u ON p.pay_by = u.id WHERE p.invoice_id = ? ORDER BY p.payment_date ASC");
+$payStmt->bind_param("i", $invoice_id);
+$payStmt->execute();
+$payResult = $payStmt->get_result();
+while ($payRow = $payResult->fetch_assoc()) {
+    $paymentHistory[] = $payRow;
+}
 
-    if ($allItemsPaid && count($items) > 0) {
-        $invoicePayStatus = 'paid';
-    } elseif ($anyItemPaid) {
-        $invoicePayStatus = 'partial';
-    } else {
-        $invoicePayStatus = 'unpaid';
-    }
+// Get credit memos for this invoice
+$creditMemos = [];
+$cmStmt = $conn->prepare("SELECT cm.*, u.name as creator_name FROM credit_memos cm LEFT JOIN users u ON cm.created_by = u.id WHERE cm.invoice_id = ? ORDER BY cm.created_at DESC");
+$cmStmt->bind_param("i", $invoice_id);
+$cmStmt->execute();
+$cmResult = $cmStmt->get_result();
+while ($cmRow = $cmResult->fetch_assoc()) {
+    $creditMemos[] = $cmRow;
 }
 
 // Company information
@@ -337,6 +351,7 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
         .invoice-title-centered {
             text-align: center;
             margin-bottom: 10px;
+            position: relative;
         }
 
         .invoice-title-centered h2 {
@@ -347,6 +362,23 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
             margin: 0;
             text-transform: uppercase;
             letter-spacing: 1.5px;
+        }
+
+        .watermark {
+            position: absolute;
+            top: 20px;
+            left: 36%;
+            transform: rotate(-15deg);
+            border: 3px dashed #000;
+            color: #000;
+            font-size: 24px;
+            font-weight: 900;
+            padding: 4px 18px;
+            letter-spacing: 3px;
+            opacity: 0.75;
+            z-index: 10;
+            pointer-events: none;
+            text-transform: uppercase;
         }
 
         .info-table {
@@ -551,14 +583,56 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 display: none !important;
             }
 
-            .header-table, .info-table, .product-table, .totals-table-wrapper,
-            .amount-in-words-box, .validity-terms-box, .bank-details-box,
-            .signature-section {
+            .header-table, .info-table {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
 
+            .product-table {
+                font-size: 11px;
+            }
+
+            .product-table thead {
+                display: table-header-group;
+            }
+
+            .product-table thead tr {
+                background-color: #f8f9fa !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .product-table tbody tr {
+                page-break-inside: auto;
+                break-inside: auto;
+            }
+
             .product-table tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .totals-table-wrapper {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .amount-in-words-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .validity-terms-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .bank-details-box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .signature-section {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
@@ -575,6 +649,19 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 right: 0;
                 background: white;
                 padding: 0 0.3in;
+            }
+
+            .payment-badge {
+                background-color: #e0e0e0 !important;
+                color: #000 !important;
+                border: 1px solid #000 !important;
+            }
+
+            .payment-badge.bg-success,
+            .payment-badge.bg-warning,
+            .payment-badge.bg-danger {
+                background-color: #e0e0e0 !important;
+                color: #000 !important;
             }
         }
 
@@ -594,6 +681,7 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 <?php if ($show_payment_details && $invoicePayStatus != 'paid'): ?>
                     <button id="markAsPaidBtn" class="btn btn-success">Mark as Paid</button>
                 <?php endif; ?>
+                <button onclick="window.print()" class="btn btn-primary">Print</button>
             </div>
         <?php endif; ?>
 
@@ -619,6 +707,11 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
         <!-- Title -->
         <div class="invoice-title-centered">
             <h2>INVOICE</h2>
+            <?php if (isset($invoice['status']) && $invoice['status'] === 'cancel'): ?>
+                <div class="watermark">CANCELLED</div>
+            <?php elseif (isset($invoicePayStatus) && $invoicePayStatus === 'paid'): ?>
+                <div class="watermark">PAID</div>
+            <?php endif; ?>
         </div>
 
         <!-- Client & Invoice Meta Info -->
@@ -637,14 +730,16 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 </td>
                 <td class="invoice-meta-cell">
                     <strong>Date :</strong> <?php echo date('j/n/Y', strtotime($invoice['issue_date'])); ?><br>
-                    <strong>Due Date :</strong> <?php echo date('j/n/Y', strtotime($invoice['due_date'])); ?><br>
+                    <strong>Due Date :</strong> <?php echo (!empty($invoice['due_date']) && $invoice['due_date'] !== '0000-00-00') ? date('j/n/Y', strtotime($invoice['due_date'])) : ''; ?><br>
                     <strong>Ref No :</strong> <?php echo htmlspecialchars($ref_no); ?><br>
                     <?php if (!empty($quotation_ref)): ?>
                         <strong>From Quotation :</strong> <?php echo htmlspecialchars($quotation_ref); ?><br>
                     <?php endif; ?>
+                    <?php if ($invoicePayStatus == 'partial' || $invoice['status'] == 'pending'): ?>
                     <span class="payment-badge <?php echo getPaymentStatusBadge($invoicePayStatus); ?>">
                         <?php echo ucfirst($invoicePayStatus); ?>
                     </span>
+                    <?php endif; ?>
                 </td>
             </tr>
         </table>
@@ -674,7 +769,7 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                         <tr>
                             <td style="text-align: center;"><?php echo $i++; ?></td>
                             <td>
-                                <strong><?php echo htmlspecialchars($item['product_id'] ? $item['product_name'] : $item['ii_product_name']); ?></strong>
+                                <strong><?php echo htmlspecialchars($item['ii_product_name']); ?></strong>
                                 <?php if (!empty($item['product_description'])): ?>
                                     <br><span style="font-size: 11px; color: #555;"><?php echo nl2br(htmlspecialchars($item['product_description'])); ?></span>
                                 <?php endif; ?>
@@ -707,15 +802,17 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 <?php endif; ?>
                 <?php
                 $invoice_vat = floatval($invoice['vat'] ?? 0);
-                $vat_pct = 0;
-                if ($total_before_discounts > 0) {
-                    $vat_pct = ($invoice_vat / $total_before_discounts) * 100;
-                }
+                if ($invoice_vat > 0):
+                    $vat_pct = 0;
+                    if ($total_before_discounts > 0) {
+                        $vat_pct = ($invoice_vat / $total_before_discounts) * 100;
+                    }
                 ?>
-                <tr>
-                    <td>Vat (<?php echo number_format($vat_pct, 1); ?>%)</td>
-                    <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($invoice_vat, 2); ?></td>
-                </tr>
+                    <tr>
+                        <td>Vat (<?php echo number_format($vat_pct, 1); ?>%)</td>
+                        <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($invoice_vat, 2); ?></td>
+                    </tr>
+                <?php endif; ?>
                 <tr>
                     <td>Total</td>
                     <td style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($grand_total, 2); ?></td>
@@ -730,6 +827,92 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
             <?php endif; ?>
         </div>
 
+        <!-- Payment Summary -->
+        <?php if ($amount_paid > 0): ?>
+        <div style="clear: both; margin-bottom: 10px; padding-top: 5px;">
+            <table class="totals-table" style="width: 300px; float: right;">
+                <tr>
+                    <td width="55%">Paid</td>
+                    <td width="45%" style="text-align: right;"><?php echo $currencySymbol . ' ' . number_format($amount_paid, 2); ?></td>
+                </tr>
+                <?php if ($balance_due > 0): ?>
+                <tr>
+                    <td style="color: #dc3545;">Balance Due</td>
+                    <td style="text-align: right; color: #dc3545; font-weight: bold;"><?php echo $currencySymbol . ' ' . number_format($balance_due, 2); ?></td>
+                </tr>
+                <?php endif; ?>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- Payment History -->
+        <?php if (!empty($paymentHistory) && $invoicePayStatus == 'partial'): ?>
+        <div style="clear: both; margin-bottom: 12px;">
+            <strong style="font-size: 11px;">Payment History</strong>
+            <table class="product-table" style="margin-top: 4px; font-size: 9.5px;">
+                <thead>
+                    <tr>
+                        <th width="5%" style="text-align: center;">#</th>
+                        <th width="20%">Date</th>
+                        <th width="25%">Method</th>
+                        <th width="20%" style="text-align: right;">Amount</th>
+                        <th width="30%">Processed By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php $p = 1; foreach ($paymentHistory as $pay): ?>
+                    <tr>
+                        <td style="text-align: center;"><?php echo $p++; ?></td>
+                        <td><?php echo date('d/m/Y H:i', strtotime($pay['payment_date'])); ?></td>
+                        <td><?php echo htmlspecialchars($pay['payment_method'] ?? 'N/A'); ?></td>
+                        <td style="text-align: right;"><?php echo number_format(floatval($pay['amount_paid']), 2); ?></td>
+                        <td><?php echo htmlspecialchars($pay['processor_name'] ?? 'N/A'); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
+        <!-- Credit Memos -->
+        <?php if (!empty($creditMemos)): ?>
+        <div style="clear: both; margin-bottom: 12px;">
+            <strong style="font-size: 11px;">Credit Memos</strong>
+            <table class="product-table" style="margin-top: 4px; font-size: 9.5px;">
+                <thead>
+                    <tr>
+                        <th width="5%" style="text-align: center;">#</th>
+                        <th width="22%">Memo No</th>
+                        <th width="18%" style="text-align: right;">Amount</th>
+                        <th width="25%">Reason</th>
+                        <th width="15%">Status</th>
+                        <th width="15%">Created By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php $c = 1; foreach ($creditMemos as $cm): ?>
+                    <tr>
+                        <td style="text-align: center;"><?php echo $c++; ?></td>
+                        <td class="fw-semibold">
+                            <a href="<?= BASE_URL ?>modules/credit_memos/download_credit_memo.php?id=<?php echo intval($cm['credit_memo_id']); ?>" target="_blank" style="color: #1B1C56;">
+                                <?php echo htmlspecialchars($cm['credit_memo_no']); ?>
+                            </a>
+                        </td>
+                        <td style="text-align: right;"><?php echo number_format(floatval($cm['amount']), 2); ?></td>
+                        <td><?php echo !empty($cm['reason']) ? htmlspecialchars($cm['reason']) : '<span class="text-muted">—</span>'; ?></td>
+                        <td>
+                            <span class="payment-badge <?php echo $cm['status'] == 'refund' ? 'bg-success' : 'bg-danger'; ?>">
+                                <?php echo ucfirst(htmlspecialchars($cm['status'])); ?>
+                            </span>
+                        </td>
+                        <td><?php echo htmlspecialchars($cm['creator_name'] ?? 'N/A'); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+
         <!-- Notes if any -->
         <div style="margin-bottom: 25px;">
             <strong>Notes / Terms :</strong>
@@ -740,7 +923,7 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
         <div class="footer-group-container">
             <!-- Bank Details Section -->
             <?php 
-            // Bank details shown only if unpaid
+            // Bank details shown if unpaid or partial
             $hasBank = !empty($company['bank_name']) || !empty($company['account_name']) || !empty($company['account_number']);
             if ($hasBank && $invoicePayStatus != 'paid' && $invoice['status'] != 'cancel'):
             ?>
@@ -776,20 +959,21 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
                 </div>
             </div>
 
-            <!-- Footer (fixed to bottom of paper when printing) -->
-            <div class="print-footer">
-                <div class="footer-line"></div>
-                <div class="footer-text">
-                    <?php 
-                    $footer_addr = $company['address'] ? htmlspecialchars(str_replace("\n", ", ", $company['address'])) : '';
-                    echo $footer_addr;
-                    if (!empty($company['phone']) || !empty($company['email'])):
-                        echo "<br>";
-                        if ($company['phone']) echo "Hot line / Tel: " . htmlspecialchars($company['phone']) . " ";
-                        if ($company['email']) echo "| E-Mail: " . htmlspecialchars($company['email']) . " ";
-                    endif;
-                    ?>
-                </div>
+        </div>
+
+        <!-- Footer (fixed to bottom of paper when printing) -->
+        <div class="print-footer">
+            <div class="footer-line"></div>
+            <div class="footer-text">
+                <?php 
+                $footer_addr = $company['address'] ? htmlspecialchars(str_replace("\n", ", ", $company['address'])) : '';
+                echo $footer_addr;
+                if (!empty($company['phone']) || !empty($company['email'])):
+                    echo "<br>";
+                    if ($company['phone']) echo "Hot line / Tel: " . htmlspecialchars($company['phone']) . " ";
+                    if ($company['email']) echo "| E-Mail: " . htmlspecialchars($company['email']) . " ";
+                endif;
+                ?>
             </div>
         </div>
     </div>
@@ -837,25 +1021,33 @@ $quotation_ref = !empty($invoice['quotation_ref_no']) ? $invoice['quotation_ref_
             const markAsPaidBtn = document.getElementById('markAsPaidBtn');
             if (markAsPaidBtn) {
                 markAsPaidBtn.addEventListener('click', function () {
+                    var remaining = <?php echo json_encode(number_format($balance_due, 2, '.', '')); ?>;
+                    if (remaining <= 0) {
+                        showToast('info', 'Invoice is already fully paid.');
+                        return;
+                    }
+
                     const formData = new FormData();
                     formData.append('invoice_id', '<?php echo $invoice_id; ?>');
-                    formData.append('pay_status', 'paid');
+                    formData.append('amount', remaining);
+                    formData.append('payment_method', 'Cash');
 
-                    fetch('<?= BASE_URL ?>modules/invoices/update_invoice_status.php', {
+                    fetch('<?= BASE_URL ?>modules/invoices/mark_paid.php', {
                         method: 'POST',
                         body: formData
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            window.location.reload();
+                            showToast('success', 'Payment recorded successfully. Status: ' + data.pay_status);
+                            setTimeout(function() { window.location.reload(); }, 1500);
                         } else {
-                            showToast('error', 'Error updating payment status: ' + data.message);
+                            showToast('error', 'Error recording payment: ' + (data.error || 'Unknown error'));
                         }
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        showToast('error', 'An error occurred while updating the payment status.');
+                        showToast('error', 'An error occurred while recording the payment.');
                     });
                 });
             }

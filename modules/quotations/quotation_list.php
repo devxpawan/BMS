@@ -11,9 +11,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-$canEditRecords = ($current_user_role === 1 || $current_user_role === 3);
-
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
@@ -24,7 +21,8 @@ $offset = ($page - 1) * $limit;
 
 $baseFrom = "FROM quotations q 
              LEFT JOIN customers c ON q.customer_id = c.customer_id
-             LEFT JOIN users u ON q.created_by = u.id";
+             LEFT JOIN users u ON q.created_by = u.id
+             WHERE q.status != 'Revised'";
 
 $selectCols = "q.*, c.name as customer_name, c.business_name as customer_business_name, 
                u.name as creator_name";
@@ -47,13 +45,13 @@ if (!empty($filter_customer)) {
     $conditions[] = "(c.name LIKE '%$c%' OR c.business_name LIKE '%$c%')";
 }
 
-$whereClause = '';
+$fullWhere = '';
 if (!empty($conditions)) {
-    $whereClause = ' WHERE ' . implode(' AND ', $conditions);
+    $fullWhere = ' AND ' . implode(' AND ', $conditions);
 }
 
-$countSql = "SELECT COUNT(*) as total $baseFrom $whereClause";
-$sql = "SELECT $selectCols $baseFrom $whereClause ORDER BY q.quotation_id DESC LIMIT $limit OFFSET $offset";
+$countSql = "SELECT COUNT(*) as total $baseFrom $fullWhere";
+$sql = "SELECT $selectCols $baseFrom $fullWhere ORDER BY q.quotation_id DESC LIMIT $limit OFFSET $offset";
 
 $countResult = $conn->query($countSql);
 $totalRows = ($countResult && $countResult->num_rows > 0) ? $countResult->fetch_assoc()['total'] : 0;
@@ -81,10 +79,7 @@ $result = $conn->query($sql);
                     </div>
                 </div>
                     
-                    <?php if (isset($_SESSION['quotation_success'])): ?>
-                        <script>document.addEventListener('DOMContentLoaded', function() { showToast('success', '<?php echo addslashes($_SESSION["quotation_success"]); ?>'); });</script>
-                        <?php unset($_SESSION['quotation_success']); ?>
-                    <?php endif; ?>
+
                     
                     <div class="card quotation-card">
                         <div class="card-body">
@@ -173,6 +168,7 @@ $result = $conn->query($sql);
                                                     <td><?php echo htmlspecialchars($row['creator_name']); ?></td>
 <td>
                             <div class="action-btn-group d-flex gap-1">
+                                <?php if (hasAccess('quotations')): ?>
                                 <a href="#" class="btn btn-view view-quotation" title="View Quotation"
                                     data-id="<?php echo $row['quotation_id']; ?>">
                                     <i class="fas fa-eye"></i>
@@ -180,6 +176,7 @@ $result = $conn->query($sql);
                                 <a href="<?= BASE_URL ?>modules/quotations/download_quotation.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-download" title="Download Quotation" target="_blank">
                                     <i class="fas fa-download"></i>
                                 </a>
+                                <?php endif; ?>
                             </div>
                         </td>
                                                 </tr>

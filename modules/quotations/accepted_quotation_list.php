@@ -11,9 +11,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-$canEditRecords = ($current_user_role === 1 || $current_user_role === 3);
-
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_customer = isset($_GET['filter_customer']) ? trim($_GET['filter_customer']) : '';
 $filter_from_date = isset($_GET['filter_from_date']) ? trim($_GET['filter_from_date']) : '';
@@ -171,6 +168,7 @@ $result = $conn->query($sql);
                                                     <td><?php echo htmlspecialchars($row['creator_name']); ?></td>
 <td>
                             <div class="action-btn-group d-flex gap-1">
+                                <?php if (hasAccess('quotations.accepted')): ?>
                                 <a href="#" class="btn btn-view view-quotation" title="View Quotation"
                                     data-id="<?php echo $row['quotation_id']; ?>">
                                     <i class="fas fa-eye"></i>
@@ -178,6 +176,7 @@ $result = $conn->query($sql);
                                 <a href="<?= BASE_URL ?>modules/quotations/download_quotation.php?id=<?php echo $row['quotation_id']; ?>" class="btn btn-download" title="Download Quotation" target="_blank">
                                     <i class="fas fa-download"></i>
                                 </a>
+                                <?php endif; ?>
                             </div>
                         </td>
                                                 </tr>

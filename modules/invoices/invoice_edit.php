@@ -12,13 +12,8 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 require_once BASE_PATH . 'includes/db_connection.php';
 require_once BASE_PATH . 'includes/functions.php';
 
-$current_user_role = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : 0;
-if ($current_user_role !== 1 && $current_user_role !== 3) {
-    $_SESSION['message'] = "You do not have permission to edit invoices.";
-    $_SESSION['message_type'] = "danger";
-    header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
-    exit();
-}
+$current_user_id = $_SESSION['user_id'] ?? 0;
+$canEditDirectly = isApprover();
 
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     $_SESSION['message'] = "Invoice ID is required.";
@@ -29,8 +24,26 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 
 $invoice_id = (int) $_GET['id'];
 
+if (!$canEditDirectly) {
+    $hasApprovedRequest = hasApprovedEditRequest($conn, $invoice_id, $current_user_id);
+    if (!$hasApprovedRequest) {
+        $hasPendingRequest = hasPendingEditRequest($conn, $invoice_id, $current_user_id);
+        if ($hasPendingRequest) {
+            $_SESSION['message'] = "Your edit request is pending approval. Please wait for a director to review it.";
+            $_SESSION['message_type'] = "warning";
+        } else {
+            $_SESSION['message'] = "You need approval to edit this invoice. Please submit an edit request.";
+            $_SESSION['message_type'] = "info";
+            header("Location: " . BASE_URL . "modules/invoices/request_edit.php?id=" . $invoice_id);
+            exit();
+        }
+        header("Location: " . BASE_URL . "modules/invoices/invoice_list.php");
+        exit();
+    }
+}
+
 $invoiceSql = "SELECT i.*, c.name as customer_name, c.email as customer_email,
-               c.phone as customer_phone, c.address as customer_address
+               c.phone as customer_phone, c.address as customer_address, c.business_name as customer_business_name
                FROM invoices i
                LEFT JOIN customers c ON i.customer_id = c.customer_id
                WHERE i.invoice_id = ?";
@@ -55,9 +68,8 @@ if ($invoice['status'] !== 'pending' && $invoice['status'] !== null && $invoice[
     exit();
 }
 
-$itemsSql = "SELECT ii.*, p.name as product_name, p.lkr_price, p.usd_price
+$itemsSql = "SELECT ii.*
              FROM invoice_items ii
-             LEFT JOIN products p ON ii.product_id = p.id
              WHERE ii.invoice_id = ?
              ORDER BY ii.item_id ASC";
 $stmt = $conn->prepare($itemsSql);
@@ -69,22 +81,8 @@ while ($row = $itemsResult->fetch_assoc()) {
     $invoice_items[] = $row;
 }
 
-$productSql = "SELECT id, name, description, lkr_price, usd_price FROM products WHERE status = 'active' ORDER BY name ASC";
-$productResult = $conn->query($productSql);
-
 $customerSql = "SELECT customer_id, name, email, phone, address, business_name FROM customers WHERE status = 'Active' ORDER BY name ASC";
 $customerResult = $conn->query($customerSql);
-
-$editItemPrices = [];
-foreach ($invoice_items as $item) {
-    $productId = $item['product_id'];
-    if ($productId) {
-        $editItemPrices[$productId] = [
-            'lkr_price' => $item['lkr_price'],
-            'usd_price' => $item['usd_price']
-        ];
-    }
-}
 
 // Calculate VAT percentage from stored values
 $invoice_vat = floatval($invoice['vat'] ?? 0);
@@ -99,8 +97,6 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
 <head>
     <?php require_once BASE_PATH . 'includes/header.php'; ?>
     <title>Edit Invoice #<?= htmlspecialchars($invoice_id) ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -444,17 +440,6 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
             border-bottom-right-radius: 8px;
         }
 
-        .select2-container--bootstrap-5 .select2-selection {
-            border-radius: 8px !important;
-            border-color: #d0d5dd !important;
-            min-height: 40px !important;
-        }
-
-        .select2-container--bootstrap-5.select2-container--focus .select2-selection {
-            border-color: #3B82F6 !important;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important;
-        }
-
         .table {
             --bs-table-hover-bg: #f9fafb;
         }
@@ -543,7 +528,7 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 <div class="page-header d-flex justify-content-between align-items-center">
                     <div>
                         <h5 class="mb-1">Edit Invoice #<?= htmlspecialchars($invoice_id) ?></h5>
-                        <p class="text-muted mb-0">Update customer, products, dates or notes for this pending invoice</p>
+                        <p class="text-muted mb-0">Update customer, items, dates or notes for this pending invoice</p>
                     </div>
                     <span class="status-pill"><i class="fas fa-clock"></i> Pending</span>
                 </div>
@@ -581,7 +566,7 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                                                 <div>
                                                     <label class="form-label">Due Date</label>
                                                     <input type="date" class="form-control" name="due_date"
-                                                        value="<?= htmlspecialchars(isset($invoice['due_date']) ? date('Y-m-d', strtotime($invoice['due_date'])) : date('Y-m-d', strtotime('+30 days'))) ?>"
+                                                        value="<?= htmlspecialchars((!empty($invoice['due_date']) && $invoice['due_date'] !== '0000-00-00') ? date('Y-m-d', strtotime($invoice['due_date'])) : date('Y-m-d', strtotime('+30 days'))) ?>"
                                                         required>
                                                 </div>
                                             </div>
@@ -613,6 +598,12 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                                                 value="<?= htmlspecialchars($invoice['customer_name'] ?? '') ?>" required>
                                         </div>
                                         <div class="mt-3">
+                                            <label class="form-label">Business Name</label>
+                                            <input type="text" class="form-control" name="customer_business_name"
+                                                id="customer_business_name" placeholder="Enter business name (optional)"
+                                                value="<?= htmlspecialchars($invoice['customer_business_name'] ?? '') ?>">
+                                        </div>
+                                        <div class="mt-3">
                                             <label class="form-label">Email</label>
                                             <input type="email" class="form-control" name="customer_email"
                                                 id="customer_email" placeholder="customer@example.com"
@@ -623,7 +614,7 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                                         <div>
                                             <label class="form-label">Phone</label>
                                             <input type="text" class="form-control" name="customer_phone"
-                                                id="customer_phone" placeholder="+94 77 123 4567"
+                                                id="customer_phone" placeholder="077 123 4567" maxlength="10" pattern="[0-9]{10}" inputmode="numeric"
                                                 value="<?= htmlspecialchars($invoice['customer_phone'] ?? '') ?>">
                                         </div>
                                         <div class="mt-3">
@@ -637,19 +628,19 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                             </div>
                         </div>
 
-                        <!-- Products Section -->
+                        <!-- Items Section -->
                         <div class="card mb-3">
                             <div class="card-body">
                                 <div class="d-flex align-items-center gap-2 mb-3">
                                     <i class="fas fa-box text-primary" style="font-size: 18px;"></i>
-                                    <h6 class="card-title m-0">Products</h6>
+                                    <h6 class="card-title m-0">Items</h6>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table align-middle" id="invoice_table" style="table-layout: fixed; width: 100%;">
                                         <thead>
                                             <tr>
                                                 <th style="width: 46px;">#</th>
-                                                <th style="width: 220px;">Product</th>
+                                                <th style="width: 220px;">Item</th>
                                                 <th style="width: 200px;">Description</th>
                                                 <th style="width: 110px;">Price</th>
                                                 <th style="width: 60px;">Qty</th>
@@ -659,33 +650,12 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php foreach ($invoice_items as $index => $item): ?>
+                                             <?php foreach ($invoice_items as $index => $item): ?>
                                                 <tr>
                                                     <td class="text-center text-muted" style="font-size: 13px; font-weight: 500;"><?= $index + 1 ?></td>
+                                                    <input type="hidden" name="invoice_item_id[]" value="<?= $item['item_id'] ?? 0 ?>">
                                                     <td>
-                                                        <select name="invoice_product[]" class="form-select product-select">
-                                                            <option value="">-- Select Product --</option>
-                                                            <?php
-                                                            $productResult->data_seek(0);
-                                                            $listedIds = [];
-                                                            while ($product = $productResult->fetch_assoc()):
-                                                                $listedIds[] = (int) $product['id']; ?>
-                                                                <option value="<?= $product['id'] ?>"
-                                                                    data-lkr-price="<?= $product['lkr_price'] ?>"
-                                                                    data-description="<?= htmlspecialchars($product['description']) ?>"
-                                                                    <?= ((int)$item['product_id'] === (int)$product['id']) ? 'selected' : '' ?>>
-                                                                    <?= htmlspecialchars($product['name']) ?>
-                                                                </option>
-                                                            <?php endwhile; ?>
-                                                            <?php if (!empty($item['product_id']) && !in_array((int) $item['product_id'], $listedIds, true)): ?>
-                                                                <option value="<?= (int) $item['product_id'] ?>"
-                                                                    data-lkr-price="<?= htmlspecialchars($item['lkr_price'] ?? 0) ?>"
-                                                                    data-description="<?= htmlspecialchars($item['product_description'] ?? '') ?>"
-                                                                    selected>
-                                                                    <?= htmlspecialchars($item['product_name'] ?? 'Unknown Product') ?> (inactive)
-                                                                </option>
-                                                            <?php endif; ?>
-                                                        </select>
+                                                        <input type="text" name="invoice_product[]" class="form-control item-name" placeholder="Enter item name" value="<?= htmlspecialchars($item['product_name'] ?? '') ?>">
                                                     </td>
                                                     <td>
                                                         <input type="text" name="invoice_product_description[]"
@@ -747,7 +717,7 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
 
                                 <div class="d-flex justify-content-between align-items-start mt-3 flex-wrap gap-3">
                                     <button type="button" id="add_product" class="btn btn-outline-success btn-sm">
-                                        <i class="fas fa-plus me-1"></i> Add Product
+                                        <i class="fas fa-plus me-1"></i> Add Item
                                     </button>
 
                                     <div class="totals-section">
@@ -865,6 +835,7 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                                     while ($customer = $customerResult->fetch_assoc()): ?>
                                         <tr class="customer-row" data-id="<?= $customer['customer_id'] ?? '' ?>"
                                             data-name="<?= htmlspecialchars($customer['name'] ?? '') ?>"
+                                            data-business-name="<?= htmlspecialchars($customer['business_name'] ?? '') ?>"
                                             data-email="<?= htmlspecialchars($customer['email'] ?? '') ?>"
                                             data-phone="<?= htmlspecialchars($customer['phone'] ?? '') ?>"
                                             data-address="<?= htmlspecialchars($customer['address'] ?? '') ?>">
@@ -892,7 +863,6 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         $(document).ready(function () {
             // Email validation function
@@ -931,27 +901,6 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 }
 
                 return isValid;
-            }
-
-            function updateProductPrice(row) {
-                var selectedOption = row.find('.product-select option:selected');
-                if (selectedOption.val() === "") return;
-
-                var priceField = row.find('.price');
-                var descriptionField = row.find('.product-description');
-                
-                // Check if it's a custom tag or a real product
-                if (selectedOption.data('lkr-price') !== undefined) {
-                    // Real product
-                    var price = parseFloat(selectedOption.data('lkr-price') || 0);
-                    var description = selectedOption.data('description') || '';
-
-                    priceField.val(isNaN(price) ? '0.00' : price.toFixed(2));
-                    descriptionField.val(description);
-                } else {
-                    // Custom product - don't overwrite if user has typed something
-                }
-                updateRowTotal(row);
             }
 
             function getFlatDiscount(row) {
@@ -1061,28 +1010,11 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 var row = $(this).closest('tr');
                 $('#customer_id').val(row.data('id'));
                 $('#customer_name').val(row.data('name'));
+                $('#customer_business_name').val(row.data('business-name'));
                 $('#customer_email').val(row.data('email'));
                 $('#customer_phone').val(row.data('phone'));
                 $('#customer_address').val(row.data('address'));
                 customerModal.style.display = "none";
-            });
-
-            // Real-time email validation
-            $('#customer_email').on('input', function () {
-                $('.validation-error').remove();
-                const email = $(this).val().trim();
-                if (email !== '' && !isValidEmail(email)) {
-                    $(this).after('<div class="text-danger validation-error">Invalid email format</div>');
-                }
-            });
-
-            // Real-time phone validation
-            $('#customer_phone').on('input', function () {
-                $('.validation-error').remove();
-                const phone = $(this).val().trim();
-                if (phone !== '' && !isValidPhoneNumber(phone)) {
-                    $(this).after('<div class="text-danger validation-error">Phone number must be 10 digits</div>');
-                }
             });
 
             // Form submission validation
@@ -1093,22 +1025,22 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 }
 
                 if ($('#invoice_table tbody tr').length === 0) {
-                    showToast('warning', 'Please add at least one product to the invoice.');
+                    showToast('warning', 'Please add at least one item to the invoice.');
                     e.preventDefault();
                     return false;
                 }
 
-                let isProductValid = true;
+                let isItemValid = true;
                 $('#invoice_table tbody tr').each(function () {
-                    let productSelect = $(this).find('.product-select');
-                    if (productSelect.val() === "") {
-                        showToast('warning', 'Please select a product for all invoice lines.');
-                        isProductValid = false;
+                    let itemName = $(this).find('.item-name');
+                    if (itemName.val().trim() === "") {
+                        showToast('warning', 'Please enter a name for all invoice items.');
+                        isItemValid = false;
                         return false;
                     }
                 });
 
-                if (!isProductValid) {
+                if (!isItemValid) {
                     e.preventDefault();
                     return false;
                 }
@@ -1123,24 +1055,14 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 return true;
             });
 
-            // Product selection change
-            $(document).on('change', '.product-select', function () {
-                updateProductPrice($(this).closest('tr'));
-            });
-
             function renumberRows() {
                 $('#invoice_table tbody tr').each(function (index) {
                     $(this).find('td:first').text(index + 1);
                 });
             }
 
-            // Add product row
+            // Add item row
             $('#add_product').click(function () {
-                let firstSelect = $('#invoice_table tbody tr:first').find('.product-select');
-                if (firstSelect.hasClass('select2-hidden-accessible')) {
-                    firstSelect.select2('destroy');
-                }
-
                 let newRow = $('#invoice_table tbody tr:first').clone();
                 newRow.find('input').val('');
                 newRow.find('.price').val('0.00');
@@ -1150,39 +1072,20 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 newRow.find('.discount-group .discount-type-btn').removeClass('active');
                 newRow.find('.discount-group .discount-type-btn[data-type="flat"]').addClass('active');
                 newRow.find('.subtotal').val('0.00');
-                newRow.find('.product-select').val('');
-                newRow.find('.product-description').val('');
                 $('#invoice_table tbody').append(newRow);
-
-                $('.product-select').select2({
-                    theme: 'bootstrap-5',
-                    width: '100%',
-                    tags: true,
-                    createTag: function (params) {
-                        var term = $.trim(params.term);
-                        if (term === '') {
-                            return null;
-                        }
-                        return {
-                            id: term,
-                            text: term,
-                            newTag: true
-                        }
-                    }
-                });
 
                 renumberRows();
                 updateTotals();
             });
 
-            // Remove product row
+            // Remove item row
             $(document).on('click', '.remove_product', function () {
                 if ($('#invoice_table tbody tr').length > 1) {
                     $(this).closest('tr').remove();
                     updateTotals();
                     renumberRows();
                 } else {
-                    showToast('warning', 'At least one product is required.');
+                    showToast('warning', 'At least one item is required.');
                 }
             });
 
@@ -1224,25 +1127,21 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
                 updateRowTotal($(this).closest('tr'));
             });
 
-            // Initialize Select2 for products
-            $('.product-select').select2({
-                theme: 'bootstrap-5',
-                width: '100%',
-                tags: true,
-                createTag: function (params) {
-                    var term = $.trim(params.term);
-                    if (term === '') {
-                        return null;
-                    }
-                    return {
-                        id: term,
-                        text: term,
-                        newTag: true
-                    }
-                }
-            });
             // Calculate initial totals from existing items
             updateTotals();
+
+            // Disable submit button when no changes are made
+            var initialFormData = $('#invoiceEditForm').serialize();
+            function checkFormChanges() {
+                var currentFormData = $('#invoiceEditForm').serialize();
+                if (currentFormData === initialFormData) {
+                    $('#submit_invoice').prop('disabled', true).addClass('disabled');
+                } else {
+                    $('#submit_invoice').prop('disabled', false).removeClass('disabled');
+                }
+            }
+            checkFormChanges();
+            $('#invoiceEditForm').on('change input', 'input, select, textarea', checkFormChanges);
         });
     </script>
     <script src="<?= BASE_URL ?>js/scripts.js"></script>
@@ -1250,7 +1149,5 @@ $invoice_vat_pct = ($invoice_net > 0) ? ($invoice_vat / $invoice_net * 100) : 0;
 
 </html>
 <?php
-$productResult->close();
-$customerResult->close();
 $conn->close();
 ?>
